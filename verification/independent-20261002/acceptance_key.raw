@@ -1,0 +1,21 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+..............
+
+  1) test concurrent duplicate acceptance and conflicting input (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:161
+     Assertion with == failed
+     code:  assert length(Enum.uniq(Enum.map(rows, & &1["invocation_id"]))) == 1
+     left:  4
+     right: 1
+     stacktrace:
+       test/cycle_integration_test.exs:165: (test)
+
+....
+Finished in 10.4 seconds (0.1s async, 10.2s sync)
+
+Result: 18/19 passed
+Failed: 1 test

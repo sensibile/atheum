@@ -1,0 +1,10 @@
+**
+!lib/
+!lib/atheum/
+!lib/atheum/core.ex
+!lib/atheum/wire.ex
+!lib/atheum/worker/
+!lib/atheum/worker/protocol.ex
+!worker/
+!worker/Dockerfile
+!worker/main.exs

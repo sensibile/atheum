@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Build only the fixed project worker; no mount, service, or package installation."""
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+
+root = Path(__file__).resolve().parents[1]
+files = ["worker/Dockerfile", "worker/main.exs", "lib/atheum/core.ex", "lib/atheum/wire.ex", "lib/atheum/worker/protocol.ex"]
+source = hashlib.sha256(b"".join(name.encode() + b"\0" + (root / name).read_bytes() for name in files)).hexdigest()
+subprocess.run(["docker", "build", "--network=none", "--label", "org.acropolis.atheum.source=" + source,
+                "-t", "atheum-worker:local-v1", "-f", "worker/Dockerfile", "."], cwd=root, check=True)
+image = json.loads(subprocess.check_output(["docker", "image", "inspect", "atheum-worker:local-v1"], text=True))[0]
+manifest = {"spec": "supplier-set-active-v1", "image_id": image["Id"], "source_sha256": source,
+            "base": "elixir:1.20.4-otp-29-slim@sha256:3898ffe18d695e770239e4b342dc6b83136f52da0a37df2298083c03068cfd4e"}
+(root / "worker/image.json").write_text(json.dumps(manifest, indent=2) + "\n")
+print(json.dumps(manifest))

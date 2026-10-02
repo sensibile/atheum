@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Local checks. No installs, Akashic builds, container creation, or deployment."""
+import datetime
+import json
+import os
+import re
+from pathlib import Path
+import subprocess
+import sys
+from urllib.parse import urlparse
+
+root = Path(__file__).resolve().parents[1]
+os.chdir(root)
+os.environ["HEX_HOME"] = str(root / ".cache" / "hex")
+mode = sys.argv[1] if len(sys.argv) == 2 else ""
+commands = {
+    "format": [["mix", "format"]],
+    "precommit": [["mix", "format", "--check-formatted"], ["mix", "compile", "--force", "--warnings-as-errors"], ["mix", "credo", "--strict"], ["mix", "dialyzer"], ["mix", "test", "--warnings-as-errors"]],
+    "test-integration": [["mix", "test", "--warnings-as-errors", "--include", "integration"]],
+}
+if mode == "review":
+    steps = commands["precommit"] + commands["test-integration"]
+elif mode in commands:
+    steps = commands[mode]
+else:
+    print("usage: scripts/check format|precommit|test-integration|review", file=sys.stderr)
+    sys.exit(3)
+if mode in ["review", "test-integration"]:
+    pg = urlparse(os.environ.get("ATHEUM_TEST_PG_URL", ""))
+    binary = Path(os.environ.get("AKASHIC_BINARY", "/missing"))
+    if pg.scheme not in ["postgres", "postgresql"] or pg.hostname not in ["localhost", "127.0.0.1"] or pg.query or pg.fragment or not re.fullmatch(r"/atheum_[a-zA-Z0-9_]{1,55}", pg.path) or not binary.is_file():
+        print("BLOCKED: explicit localhost Atheum test DB URL and existing AKASHIC_BINARY required", file=sys.stderr)
+        sys.exit(4)
+run = root / "artifacts" / (datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + mode)
+run.mkdir(parents=True)
+report = {"mode": mode, "steps": [], "scope": "Atheum only; actual I/O only in integration/review"}
+for index, command in enumerate(steps):
+    try:
+        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except FileNotFoundError as error:
+        print("BLOCKED:", error, file=sys.stderr)
+        sys.exit(4)
+    output = result.stdout
+    if "test" in command and result.returncode == 0:
+        count = re.search(r"Result: (\d+) passed", output)
+        if not count or int(count.group(1)) == 0:
+            output += "\nNOT_CONFIGURED: no executed test success count\n"
+            result.returncode = 3
+    (run / f"{index}.log").write_text(output)
+    print(output, end="")
+    report["steps"].append({"command": command, "exit_code": result.returncode})
+    if result.returncode != 0:
+        report["status"] = "FAIL"
+        (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        sys.exit(result.returncode)
+report["status"] = "PASS"
+(run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+print("PASS:", run.relative_to(root) / "report.json")

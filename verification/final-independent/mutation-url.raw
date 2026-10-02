@@ -1,0 +1,57 @@
+$ ['mix', 'test', 'test/final_sensitivity_test.exs', '--trace']
+==> file_system
+Compiling 7 files (.ex)
+Generated file_system app
+==> bunt
+Compiling 2 files (.ex)
+Generated bunt app
+==> jason
+Compiling 10 files (.ex)
+Generated jason app
+==> erlex
+Compiling 2 files (.erl)
+Compiling 2 files (.ex)
+Generated erlex app
+==> dialyxir
+Compiling 70 files (.ex)
+Generated dialyxir app
+==> credo
+Compiling 257 files (.ex)
+Generated credo app
+==> atheum
+Compiling 6 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 831641, max_cases: 1
+Excluding tags: [:integration]
+
+
+FinalSensitivityTest [test/final_sensitivity_test.exs]
+  * test query dbname override is refused before adapter [L#12]
+  * test query dbname override is refused before adapter (1.7ms) [L#12]
+
+  1) test query dbname override is refused before adapter (FinalSensitivityTest)
+     test/final_sensitivity_test.exs:12
+     match (=) failed
+     code:  assert {:error, %{"code" => "invalid_configuration"}} =
+              Postgres.query("SELECT 1", %{
+                psql: "/missing",
+                pg_url: "postgres://postgres@127.0.0.1:55440/atheum_cycle_test?dbname=postgres"
+              })
+     left:  {:error, %{"code" => "invalid_configuration"}}
+     right: {:error,
+             %{
+               "code" => "journal_transport_failure",
+               "detail" => "Erlang error: :enoent"
+             }}
+     stacktrace:
+       test/final_sensitivity_test.exs:13: (test)
+
+  * test unknown is preserved [L#4]
+  * test unknown is preserved (0.5ms) [L#4]
+  * test bad successful result is refused [L#9]
+  * test bad successful result is refused (1.5ms) [L#9]
+
+Finished in 0.01 seconds (0.00s async, 0.01s sync)
+
+Result: 2/3 passed
+Failed: 1 test

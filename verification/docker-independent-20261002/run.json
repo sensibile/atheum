@@ -1,0 +1,18 @@
+{
+  "command": [
+    "elixir",
+    "-pa",
+    "/tmp/atheum-docker-independent-20261002/_build/test/lib/atheum/ebin",
+    "-r",
+    "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/independent_test.exs",
+    "-r",
+    "/tmp/atheum-docker-independent-20261002/test/worker_integration_test.exs",
+    "-e",
+    ""
+  ],
+  "exit": 0,
+  "start_unix": 1790908557.0510561,
+  "seconds": 40.88552284240723,
+  "seed": 20261002,
+  "db": "postgres://postgres@127.0.0.1:55440/atheum_docker_independent_20261002"
+}

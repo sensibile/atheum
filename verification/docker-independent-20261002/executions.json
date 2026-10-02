@@ -1,0 +1,131 @@
+[
+  {
+    "name": "final-real",
+    "command": [
+      "elixir",
+      "-pa",
+      "/tmp/atheum-docker-independent-20261002/_build/test/lib/atheum/ebin",
+      "-r",
+      "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/independent_test.exs",
+      "-r",
+      "/tmp/atheum-docker-independent-20261002/test/worker_integration_test.exs",
+      "-e",
+      ""
+    ],
+    "cwd": "/tmp/atheum-docker-independent-20261002",
+    "exit": 0,
+    "start_unix": 1790908656.468916,
+    "seconds": 29.719340085983276
+  },
+  {
+    "name": "stale_fence-compile",
+    "command": [
+      "elixirc",
+      "-o",
+      "/tmp/atheum-mutation-stale_fence-20261002/_build/test/lib/atheum/ebin",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/akashic.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/core.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/process_io.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/wire.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/postgres.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/worker/protocol.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/worker/spec.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/worker/session.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/worker/docker.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/worker/manager.ex",
+      "/tmp/atheum-mutation-stale_fence-20261002/lib/atheum/worker/state.ex"
+    ],
+    "cwd": "/tmp/atheum-mutation-stale_fence-20261002",
+    "exit": 0,
+    "start_unix": 1790908686.193681,
+    "seconds": 0.39978790283203125
+  },
+  {
+    "name": "stale_fence",
+    "command": [
+      "elixir",
+      "-pa",
+      "/tmp/atheum-mutation-stale_fence-20261002/_build/test/lib/atheum/ebin",
+      "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/stale_fence_test.exs"
+    ],
+    "cwd": "/tmp/atheum-mutation-stale_fence-20261002",
+    "exit": 2,
+    "start_unix": 1790908686.594207,
+    "seconds": 16.966044902801514
+  },
+  {
+    "name": "false_absence-compile",
+    "command": [
+      "elixirc",
+      "-o",
+      "/tmp/atheum-mutation-false_absence-20261002/_build/test/lib/atheum/ebin",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/akashic.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/core.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/process_io.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/wire.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/postgres.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/worker/protocol.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/worker/spec.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/worker/session.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/worker/docker.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/worker/manager.ex",
+      "/tmp/atheum-mutation-false_absence-20261002/lib/atheum/worker/state.ex"
+    ],
+    "cwd": "/tmp/atheum-mutation-false_absence-20261002",
+    "exit": 0,
+    "start_unix": 1790908703.566467,
+    "seconds": 0.40369486808776855
+  },
+  {
+    "name": "false_absence",
+    "command": [
+      "elixir",
+      "-pa",
+      "/tmp/atheum-mutation-false_absence-20261002/_build/test/lib/atheum/ebin",
+      "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/false_absence_test.exs"
+    ],
+    "cwd": "/tmp/atheum-mutation-false_absence-20261002",
+    "exit": 2,
+    "start_unix": 1790908703.970911,
+    "seconds": 3.4107167720794678
+  },
+  {
+    "name": "release_unknown_create-compile",
+    "command": [
+      "elixirc",
+      "-o",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/_build/test/lib/atheum/ebin",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/akashic.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/core.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/process_io.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/wire.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/postgres.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/worker/protocol.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/worker/spec.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/worker/session.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/worker/docker.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/worker/manager.ex",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/lib/atheum/worker/state.ex"
+    ],
+    "cwd": "/tmp/atheum-mutation-release_unknown_create-20261002",
+    "exit": 0,
+    "start_unix": 1790908707.387286,
+    "seconds": 0.4017910957336426
+  },
+  {
+    "name": "release_unknown_create",
+    "command": [
+      "elixir",
+      "-pa",
+      "/tmp/atheum-mutation-release_unknown_create-20261002/_build/test/lib/atheum/ebin",
+      "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/release_unknown_create_test.exs"
+    ],
+    "cwd": "/tmp/atheum-mutation-release_unknown_create-20261002",
+    "exit": 2,
+    "start_unix": 1790908707.789835,
+    "seconds": 0.9316859245300293
+  }
+]

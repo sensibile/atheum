@@ -1,0 +1,32 @@
+Running ExUnit with seed: 297937, max_cases: 1
+Excluding tags: [:test]
+Including tags: [location: {"verification/final-independent/final_test.exs", 129}]
+
+
+Atheum.FinalIndependentTest [verification/final-independent/final_test.exs]
+  * test independent start cancel races retain consistent evidence [L#181]  * test independent start cancel races retain consistent evidence (excluded) [L#181]
+  * test independent concurrent acceptance stable identities and one event [L#58]  * test independent concurrent acceptance stable identities and one event (excluded) [L#58]
+  * test independent worker death and result journal failure preserve unknown [L#138]  * test independent worker death and result journal failure preserve unknown (excluded) [L#138]
+  * test independent cancellation wins before run and recovery stays unknown [L#88]  * test independent cancellation wins before run and recovery stays unknown (excluded) [L#88]
+  * test independent expired recovery cannot retrieve receipt by replay [L#170]  * test independent expired recovery cannot retrieve receipt by replay (excluded) [L#170]
+  * test independent URL rejection matrix never launches adapter [L#38]  * test independent URL rejection matrix never launches adapter (excluded) [L#38]
+  * test independent malformed success matrix always remains unknown [L#120]  * test independent malformed success matrix always remains unknown (excluded) [L#120]
+  * test independent PG and CLI output limits; timeout bounds [L#109]  * test independent PG and CLI output limits; timeout bounds (excluded) [L#109]
+  * test independent live worker recovery and stale result fencing [L#70]  * test independent live worker recovery and stale result fencing (excluded) [L#70]
+  * test contradictory success and rejection after real effect must remain unknown [L#129]CONTRADICTORY_ACTUAL {"acceptance_key":"f027d6b086d0200d6d85750368cf7f6b","attempt_id":"06afdec2a8fa455a7d86e181d221d7fa","cancel_requested":false,"effect_certainty":"confirmed_absent","error":{"code":"invalid_input","detail":"contradictory injected envelope"},"execution_id":"511619a8a37afcfb83e13fe78b791ad9","generation":1,"invocation_id":"33cd9449be31f1299fadb6d2d65ce8ba","request":{"apply":{"expected_version":1,"operations":[{"active":false,"id":"S","op":"set_active"}],"request_id":"a362d959547b1a62940774c563f91a61"},"deadline_ms":1790904865575,"fingerprint":{"action":"supplier.set_active.v1","context":"local-experiment","deadline_ms":1790904865575,"input":{"active":false,"expected_version":1,"supplier_id":"S"},"safe_retry":true,"target":{"db":"/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-final-b3e52dbe97454e44be4c9fa7c4950798/db","identity":"e55b3823edce2b2e8d30bf3e206ec2ea","storage":"snapshot"}},"safe_retry":true,"target":{"db":"/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-final-b3e52dbe97454e44be4c9fa7c4950798/db","identity":"e55b3823edce2b2e8d30bf3e206ec2ea","storage":"snapshot"}},"result":null,"status":"failed","stop_confirmed":false,"updated_at":"2026-10-02T01:33:26.153796+00:00"} ACTUAL_VERSION=2
+  * test contradictory success and rejection after real effect must remain unknown (789.2ms) [L#129]
+
+  1) test contradictory success and rejection after real effect must remain unknown (Atheum.FinalIndependentTest)
+     verification/final-independent/final_test.exs:129
+     Assertion with == failed
+     code:  assert done["status"] == "unresolved"
+     left:  "failed"
+     right: "unresolved"
+     stacktrace:
+       verification/final-independent/final_test.exs:135: (test)
+
+
+Finished in 0.9 seconds (0.00s async, 0.9s sync)
+
+Result: 0/1 passed, 9 excluded
+Failed: 1 test

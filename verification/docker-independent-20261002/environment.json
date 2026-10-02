@@ -1,0 +1,62 @@
+[
+  {
+    "command": [
+      "docker",
+      "image",
+      "inspect",
+      "sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b"
+    ],
+    "exit": 0,
+    "stdout": "[\n    {\n        \"Id\": \"sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b\",\n        \"RepoTags\": [\n            \"atheum-worker:local-v1\"\n        ],\n        \"RepoDigests\": [],\n        \"Comment\": \"buildkit.dockerfile.v0\",\n        \"Created\": \"2026-10-02T11:21:27.277307209+09:00\",\n        \"Config\": {\n            \"User\": \"65534:65534\",\n            \"Env\": [\n                \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"OTP_VERSION=29.1.1\",\n                \"REBAR3_VERSION=3.27.0\",\n                \"ELIXIR_VERSION=v1.20.4\",\n                \"LANG=C.UTF-8\",\n                \"HOME=/tmp\",\n                \"ERL_CRASH_DUMP=/tmp/erl_crash.dump\",\n                \"ELIXIR_ERL_OPTIONS=+S 1:1 +A 1 +SDcpu 1 +SDio 1\"\n            ],\n            \"Entrypoint\": [\n                \"elixir\",\n                \"-r\",\n                \"/app/atheum/wire.ex\",\n                \"-r\",\n                \"/app/atheum/core.ex\",\n                \"-r\",\n                \"/app/atheum/worker/protocol.ex\",\n                \"/app/main.exs\"\n            ],\n            \"WorkingDir\": \"/app\",\n            \"Labels\": {\n                \"org.acropolis.atheum.source\": \"6c45b1d061705ab775854bae792f8f6afef32952e554576b2b2e970f19e70eeb\",\n                \"org.acropolis.atheum.worker_spec\": \"supplier-set-active-v1\",\n                \"org.opencontainers.image.version\": \"29.1.1\"\n            }\n        },\n        \"Architecture\": \"arm64\",\n        \"Os\": \"linux\",\n        \"Size\": 333384762,\n        \"GraphDriver\": {\n            \"Data\": {\n                \"LowerDir\": \"/var/lib/docker/overlay2/nlot51g7wmuog9ij1klw6gcrp/diff:/var/lib/docker/overlay2/j2aiqrn2bekrztmdk6p15ehu6/diff:/var/lib/docker/overlay2/k2ht70k4wtl1hkjezqvavpab8/diff:/var/lib/docker/overlay2/210488ce05ce14f50d9c5b50c10c9063f1575445af1913884d1160892d5b9aad/diff:/var/lib/docker/overlay2/06c9f6e361394b051562af78228439033323d3d97cf5679fad75e94a8ac17a05/diff:/var/lib/docker/overlay2/04ad06cf86ead048bf47bff5f7f6811e8cbb64dee5b18f6eb07ff1b8d0bd4591/diff\",\n                \"MergedDir\": \"/var/lib/docker/overlay2/oj8laq3unqacu3z9w9vikxds3/merged\",\n                \"UpperDir\": \"/var/lib/docker/overlay2/oj8laq3unqacu3z9w9vikxds3/diff\",\n                \"WorkDir\": \"/var/lib/docker/overlay2/oj8laq3unqacu3z9w9vikxds3/work\"\n            },\n            \"Name\": \"overlay2\"\n        },\n        \"RootFS\": {\n            \"Type\": \"layers\",\n            \"Layers\": [\n                \"sha256:fee3d105d5c8439c75356aecdc0d07666e08e0a54147c92eac4fb3572d80e6ac\",\n                \"sha256:7f6fe2f85a8d56b5e14abd00c50a5e093e7f67a022ac57bd726e1f370c00ca11\",\n                \"sha256:7487285726c29cf0f090bb7b02fd16f3e6d0393c5c76e16c3778aba0ed53f74a\",\n                \"sha256:3893c2cb3d2248d171d98f65e46c2564e396cda9ae339061c452afb71af8eb33\",\n                \"sha256:5c0f5cb22d29d9407d3a597bd130189d759c93c079ac5b37ff9a749b14178420\",\n                \"sha256:1f98e83abb414f204024b39ad456747e65fd06ac89e498f92ab1390632ac5899\",\n                \"sha256:d25ac74d827bf0d19212adb24351737a54bc74ab2c3512afeeb6b0e31b13c6bd\"\n            ]\n        },\n        \"Metadata\": {\n            \"LastTagTime\": \"2026-10-02T11:21:27.314510994+09:00\"\n        }\n    }\n]\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "version"
+    ],
+    "exit": 0,
+    "stdout": "Client:\n Version:           29.4.0\n API version:       1.54\n Go version:        go1.26.4\n Git commit:        9d7ad9f\n Built:             Fri Aug  7 04:38:56 2026\n OS/Arch:           darwin/arm64\n Context:           orbstack\n\nServer: Docker Engine - Community\n Engine:\n  Version:          29.4.0\n  API version:      1.54 (minimum version 1.40)\n  Go version:       go1.26.1\n  Git commit:       daa0cb7f\n  Built:            Tue Apr  7 08:35:43 2026\n  OS/Arch:          linux/arm64\n  Experimental:     true\n containerd:\n  Version:          v2.2.2\n  GitCommit:        301b2dac98f15c27117da5c8af12118a041a31d9\n runc:\n  Version:          1.5.1\n  GitCommit:        bb14dabeb7185bb72c8c86735d090dcb20f36587\n docker-init:\n  Version:          0.19.0\n  GitCommit:        de40ad0\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "elixir",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "Erlang/OTP 29 [erts-17.1] [source] [64-bit] [smp:10:10] [ds:10:10:10] [async-threads:1] [jit]\n\nElixir 1.20.4 (compiled with Erlang/OTP 29)\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "psql",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "psql (PostgreSQL) 18.6\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "ps",
+      "-a",
+      "--filter",
+      "label=org.acropolis.atheum.worker=supplier-set-active-v1",
+      "--format",
+      "{{json .}}"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "binary": "/usr/local/bin/docker",
+    "sha256": "70d5a06adf388bd09b652f47ddc9ca31663a3e5353d24188bdb0054b3014ab3e"
+  },
+  {
+    "binary": "/opt/homebrew/opt/libpq/bin/psql",
+    "sha256": "34661328090ed7ac45b804ed5d96b9e0517c5be0bd6131fb5b4ab215bf1eba07"
+  }
+]

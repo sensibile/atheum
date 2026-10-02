@@ -1,0 +1,13 @@
+{
+  "command": [
+    "mix",
+    "test",
+    "--include",
+    "integration",
+    "--seed",
+    "20261002"
+  ],
+  "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-independent-ohoqsqlz",
+  "seed": 20261002,
+  "exit": 0
+}

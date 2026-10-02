@@ -1,0 +1,101 @@
+[
+  {
+    "name": "create-db",
+    "argv": [
+      "psql",
+      "-h",
+      "127.0.0.1",
+      "-p",
+      "55440",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-c",
+      "CREATE DATABASE atheum_envelope_c3c203a4d1"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 0
+  },
+  {
+    "name": "format-independent",
+    "argv": [
+      "mix",
+      "format",
+      "test/independent_test.exs"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 0
+  },
+  {
+    "name": "format-independent-second",
+    "argv": [
+      "mix",
+      "format",
+      "test/independent_test.exs"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 0
+  },
+  {
+    "name": "precommit",
+    "argv": [
+      "scripts/check",
+      "precommit"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 4
+  },
+  {
+    "name": "review",
+    "argv": [
+      "scripts/check",
+      "review"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 4
+  },
+  {
+    "name": "independent",
+    "argv": [
+      "mix",
+      "test",
+      "test/independent_test.exs",
+      "--include",
+      "integration",
+      "--trace"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 0
+  },
+  {
+    "name": "drop-db",
+    "argv": [
+      "psql",
+      "-h",
+      "127.0.0.1",
+      "-p",
+      "55440",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-c",
+      "DROP DATABASE atheum_envelope_c3c203a4d1"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 0
+  },
+  {
+    "name": "hook",
+    "argv": [
+      "scripts/check-hook"
+    ],
+    "cwd": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-4nt87tt8",
+    "exit": 0
+  }
+]

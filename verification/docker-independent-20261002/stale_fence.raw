@@ -1,0 +1,103 @@
+    warning: function snapshot/2 is unused
+    │
+ 72 │   defp snapshot(row, c) do
+    │        ~
+    │
+    └─ /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/stale_fence_test.exs:72:8: IndependentDockerTest (module)
+
+    warning: unused alias Docker
+    │
+  5 │   alias Atheum.Worker.{Docker, Manager, State}
+    │   ~
+    │
+    └─ /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/stale_fence_test.exs:5:3
+
+Running ExUnit with seed: 20261002, max_cases: 20
+
+
+
+  1) test late worker result cannot overwrite newer durable attempt (IndependentDockerTest)
+     /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/stale_fence_test.exs:80
+     Assertion failed, no matching message after 15000ms
+     Showing 2 of 2 messages in the mailbox
+     code: assert_receive {:old_result, {:error, :stale_attempt}}
+     mailbox:
+       pattern: {:old_result, {:error, :stale_attempt}}
+       value:   {:old_result,
+                 {:ok,
+                  %{
+                    "acceptance_key" => "067896dce293bd50dd1e4841dca24440",
+                    "attempt_id" => "independent-newer",
+                    "cancel_requested" => false,
+                    "effect_certainty" => "confirmed_present",
+                    "error" => nil,
+                    "execution_id" => "3247f1608b9c1fa6273554c1af3682aa",
+                    "generation" => 2,
+                    "invocation_id" => "3ef530d835f9d8913063b61dc75b167c",
+                    "request" => %{
+                      "apply" => %{
+                        "expected_version" => 1,
+                        "operations" => [
+                          %{
+                            "active" => false,
+                            "id" => "S1",
+                            "op" => "set_active"
+                          }
+                        ],
+                        "request_id" => "dd18c4c919f54f828a91883d0532b21f"
+                      },
+                      "deadline_ms" => 1790908747048,
+                      "fingerprint" => %{
+                        "action" => "supplier.set_active.v1",
+                        "context" => "local-experiment",
+                        "deadline_ms" => 1790908747048,
+                        "input" => %{
+                          "active" => false,
+                          "expected_version" => 1,
+                          "supplier_id" => "S1"
+                        },
+                        "safe_retry" => true,
+                        "target" => %{
+                          "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-worker-test-b666d3eedf8ac0c00e9d677c328c6f18/db",
+                          "identity" => "4fa125533ed4c96b3161474b4ff269c6",
+                          "storage" => "snapshot"
+                        }
+                      },
+                      "safe_retry" => true,
+                      "target" => %{
+                        "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-worker-test-b666d3eedf8ac0c00e9d677c328c6f18/db",
+                        "identity" => "4fa125533ed4c96b3161474b4ff269c6",
+                        "storage" => "snapshot"
+                      }
+                    },
+                    "result" => %{
+                      "changed" => true,
+                      "difference" => %{
+                        "added_products" => [],
+                        "newly_blocked" => [],
+                        "removed_products" => [],
+                        "restored" => []
+                      },
+                      "version" => 2,
+                      "work" => %{
+                        "recomputed_parts" => 0,
+                        "recomputed_products" => 0,
+                        "visited_relations" => 0
+                      }
+                    },
+                    "status" => "succeeded",
+                    "stop_confirmed" => false,
+                    "updated_at" => "2026-10-02T02:38:08.636714+00:00"
+                  }}}
+
+       pattern: {:old_result, {:error, :stale_attempt}}
+       value:   {:DOWN, #Reference<0.3350636335.3995860993.225527>, :process,
+                 #PID<0.123.0>, :normal}
+     stacktrace:
+       /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/stale_fence_test.exs:98: (test)
+
+
+Finished in 16.6 seconds (0.08s on load, 0.00s async, 16.5s sync)
+
+Result: 0/1 passed
+Failed: 1 test

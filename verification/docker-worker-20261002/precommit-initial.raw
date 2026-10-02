@@ -1,0 +1,3 @@
+warning: failed to subscribe to Mix events using TCP, reason: :eperm
+
+** (Mix) failed to acquire filesystem lock using TCP, reason: :eperm

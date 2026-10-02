@@ -1,0 +1,60 @@
+Compiling 12 files (.ex)
+Generated atheum app
+Checking 19 source files ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.08 seconds (0.01s to load, 0.07s running 69 checks on 19 files)
+177 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:atheum, :compiler, :crypto, :elixir, :kernel, :mix, :stdlib]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/Users/tonton/Documents/workspace/alaya/atheum/.cache/plts/atheum.plt",
+  files: [~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Akashic.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Core.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Postgres.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.ProcessIO.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Wire.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m1.2s
+done (passed successfully)
+Running ExUnit with seed: 553354, max_cases: 20
+Excluding tags: [:integration]
+
+...............
+Finished in 1.2 seconds (1.2s async, 0.00s sync)
+
+Result: 15 passed, 20 excluded
+Running ExUnit with seed: 266229, max_cases: 20
+Including tags: [:integration]
+
+...............WORKER_CONSTRAINTS {"Binds":null,"CapDrop":["ALL"],"Memory":134217728,"MemorySwap":134217728,"NanoCpus":500000000,"NetworkMode":"none","PidsLimit":64,"PortBindings":{},"ReadonlyRootfs":true,"RestartPolicy":{"MaximumRetryCount":0,"Name":"no"},"SecurityOpt":["no-new-privileges"],"Tmpfs":{"/tmp":"rw,noexec,nosuid,size=16m"}}
+WORKER_DURABLE {"instance_name":"atheum-worker-dbab9e93f1cc09084c4278ff3886b4d6","instance_generation":23,"owner_token":"29d57f2128cf14874152a4d81c75984f","invocation_id":"ce8be133b49f25cba7c08c67305e4aa9","execution_id":"12f08d0666a1f13199ab2be20ae77d57","attempt_id":"9b938296489c3ff41b677a694893a015","job_generation":1,"image_id":"sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b","container_id":"7b2f03fb2cf3b85def82c860abde83078cd5144ca74a6a6baaa3d995ee09834c","phase":"removed","observations":[{"data": {"container_id": "7b2f03fb2cf3b85def82c860abde83078cd5144ca74a6a6baaa3d995ee09834c"}, "phase": "created"}, {"data": {"spec": "supplier-set-active-v1", "type": "ready", "instance": "atheum-worker-dbab9e93f1cc09084c4278ff3886b4d6", "instance_generation": 23}, "phase": "ready"}, {"data": {"attempt_id": "9b938296489c3ff41b677a694893a015"}, "phase": "executing"}, {"data": {"exit": 0, "type": "observation", "outcome": {"ok": true, "result": {"apply": {"work": {"recomputed_parts": 0, "visited_relations": 0, "recomputed_products": 0}, "changed": true, "version": 2, "difference": {"restored": [], "newly_blocked": [], "added_products": [], "removed_products": []}}}}, "attempt_id": "9b938296489c3ff41b677a694893a015"}, "phase": "effect_observed"}, {"data": {"exit": 0, "type": "result", "outcome": {"ok": true, "result": {"apply": {"work": {"recomputed_parts": 0, "visited_relations": 0, "recomputed_products": 0}, "changed": true, "version": 2, "difference": {"restored": [], "newly_blocked": [], "added_products": [], "removed_products": []}}}}, "instance": "atheum-worker-dbab9e93f1cc09084c4278ff3886b4d6", "attempt_id": "9b938296489c3ff41b677a694893a015", "generation": 1, "execution_id": "12f08d0666a1f13199ab2be20ae77d57", "invocation_id": "ce8be133b49f25cba7c08c67305e4aa9"}, "phase": "result_received"}, {"data": {"exit_code": 0}, "phase": "exited"}, {"data": {"removed": true, "container_id": "7b2f03fb2cf3b85def82c860abde83078cd5144ca74a6a6baaa3d995ee09834c", "worker_stop_confirmed": true}, "phase": "removed"}],"updated_at":"2026-10-02T02:27:10.362524+00:00"}
+.....
+
+  1) test lost result after committed effect replays receipt without duplicate mutation (Atheum.WorkerIntegrationTest)
+     test/worker_integration_test.exs:278
+     ** (EXIT from #PID<0.261.0>) :epipe
+
+...ENVELOPE_VARIANT {"certainty":"unknown","name":"false_with_success","observed":"unresolved","recovered_version":2,"same_request":true,"wire":{"error":{"code":"invalid_input","detail":"contradiction"},"ok":false,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":2,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":6945083,"read_decode_ns":271542,"validate_ns":36625},"write_work":{"commit_ns":97958,"deletes":0,"delta_ns":167,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":73375,"key_bytes":16,"logical_writes":1,"payload_bytes":1444,"plan_ns":27584,"publish_ns":6666,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"true_with_error","observed":"unresolved","recovered_version":4,"same_request":true,"wire":{"error":{"code":"invalid_input","detail":"contradiction"},"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":4,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":7154875,"read_decode_ns":286125,"validate_ns":36542},"write_work":{"commit_ns":137583,"deletes":0,"delta_ns":250,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":102916,"key_bytes":16,"logical_writes":1,"payload_bytes":2213,"plan_ns":33459,"publish_ns":7541,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"false_with_null_result","observed":"unresolved","recovered_version":6,"same_request":true,"wire":{"error":{"code":"version_conflict","detail":"contradiction"},"ok":false,"result":null}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"true_with_null_error","observed":"unresolved","recovered_version":8,"same_request":true,"wire":{"error":null,"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":8,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":7592959,"read_decode_ns":441042,"validate_ns":40500},"write_work":{"commit_ns":148875,"deletes":0,"delta_ns":209,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":158459,"key_bytes":16,"logical_writes":1,"payload_bytes":3751,"plan_ns":28250,"publish_ns":8750,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"missing_ok","observed":"unresolved","recovered_version":10,"same_request":true,"wire":{"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":10,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":6975333,"read_decode_ns":356833,"validate_ns":36708},"write_work":{"commit_ns":119167,"deletes":0,"delta_ns":167,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":182459,"key_bytes":16,"logical_writes":1,"payload_bytes":4522,"plan_ns":28792,"publish_ns":9416,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"incomplete_rejection","observed":"unresolved","recovered_version":12,"same_request":true,"wire":{"error":{"code":"invalid_input"},"ok":false}}
+...........
+Finished in 31.8 seconds (1.3s async, 30.4s sync)
+
+Result: 34/35 passed
+Failed: 1 test

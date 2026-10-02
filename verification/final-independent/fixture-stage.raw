@@ -1,0 +1,2 @@
+$ ['git', 'add', 'lib', 'test', 'priv', 'scripts', '.githooks', 'mix.exs', 'mix.lock', '.formatter.exs', '.gitignore']
+$ ['git', 'add', 'lib', 'test', 'priv', 'scripts', '.githooks', 'mix.exs', 'mix.lock', '.formatter.exs', '.gitignore']

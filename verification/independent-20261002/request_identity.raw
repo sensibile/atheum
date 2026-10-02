@@ -1,0 +1,83 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+......
+
+  1) test response lost after real commit, recover in fresh VM, then fence old result (IndependentCycleTest)
+     test/independent_test.exs:35
+     Assertion with == failed
+     code:  assert done["status"] == "succeeded"
+     left:  "failed"
+     right: "succeeded"
+     stacktrace:
+       test/independent_test.exs:47: (test)
+
+..
+
+  2) test real success then worker death before journal completion recovers exact receipt (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:179
+     Assertion with == failed
+     code:  assert recovered["result"] == first
+     left:  nil
+     right: %{
+              "changed" => true,
+              "difference" => %{
+                "added_products" => [],
+                "newly_blocked" => ["P"],
+                "removed_products" => [],
+                "restored" => []
+              },
+              "version" => 2,
+              "work" => %{
+                "recomputed_parts" => 1,
+                "recomputed_products" => 1,
+                "visited_relations" => 4
+              }
+            }
+     stacktrace:
+       test/cycle_integration_test.exs:206: (test)
+
+.
+
+  3) test PostgreSQL result write failure after effect is recoverable without graph rollback (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:335
+     Assertion with == failed
+     code:  assert recovered["result"]["version"] == 2
+     left:  nil
+     right: 2
+     stacktrace:
+       test/cycle_integration_test.exs:363: (test)
+
+....
+
+  4) test timeout is unknown and exact-payload recovery is safe (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:247
+     Assertion with == failed
+     code:  assert recovered["result"]["version"] == 2
+     left:  nil
+     right: 2
+     stacktrace:
+       test/cycle_integration_test.exs:273: (test)
+
+.
+
+  5) test real Function, durable result, independent graph answer and no extra replay version (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:86
+     match (=) failed
+     code:  assert {:ok, replay} = Akashic.apply(%{"command" => "apply", "request" => row["request"]["apply"]}, c)
+     left:  {:ok, replay}
+     right: {:error,
+             %{
+               "code" => "version_conflict",
+               "detail" => "expected 1, current 2"
+             }}
+     stacktrace:
+       test/cycle_integration_test.exs:97: (test)
+
+
+Finished in 10.0 seconds (0.1s async, 9.9s sync)
+
+Result: 14/19 passed
+Failed: 5 tests

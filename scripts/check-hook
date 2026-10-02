@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Check staged export, partial-staging rejection, deletions and immutable fixture index."""
+import hashlib
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+source = Path(__file__).resolve().parents[1]
+with tempfile.TemporaryDirectory(prefix="atheum-hook-") as directory:
+    root = Path(directory)
+    (root / ".githooks").mkdir()
+    (root / "scripts").mkdir()
+    shutil.copy2(source / ".githooks/pre-commit", root / ".githooks/pre-commit")
+    def git(*args):
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, env={**__import__("os").environ, "GIT_OPTIONAL_LOCKS": "0"})
+    assert git("init", "-q").returncode == 0
+    assert git("config", "--local", "core.hooksPath", ".githooks").returncode == 0
+    check = root / "scripts/check"
+    check.write_text('#!/bin/sh\n[ "$1" = "precommit" ] || exit 9\n[ ! -f untracked.txt ] || exit 8\n[ ! -f removed.txt ] || exit 6\nexit 0\n')
+    check.chmod(0o700)
+    (root / "example.txt").write_text("staged\n")
+    (root / "removed.txt").write_text("temporary staged source\n")
+    assert git("add", ".").returncode == 0
+    assert git("rm", "--cached", "removed.txt").returncode == 0
+    # Files present in the working tree but absent from index must not affect the gate.
+    (root / "untracked.txt").write_text("not part of commit\n")
+    index = root / ".git/index"
+    before = hashlib.sha256(index.read_bytes()).hexdigest()
+    assert git("hook", "run", "pre-commit").returncode == 0
+    assert hashlib.sha256(index.read_bytes()).hexdigest() == before
+    check.write_text('#!/bin/sh\nexit 7\n')
+    assert git("add", "scripts/check").returncode == 0
+    before = hashlib.sha256(index.read_bytes()).hexdigest()
+    assert git("hook", "run", "pre-commit").returncode != 0
+    assert hashlib.sha256(index.read_bytes()).hexdigest() == before
+    check.write_text('#!/bin/sh\nexit 0\n')
+    assert git("add", "scripts/check").returncode == 0
+    (root / "example.txt").write_text("unstaged\n")
+    before = hashlib.sha256(index.read_bytes()).hexdigest()
+    denied = git("hook", "run", "pre-commit")
+    assert denied.returncode != 0 and "unstaged changes" in denied.stderr
+    assert hashlib.sha256(index.read_bytes()).hexdigest() == before
+print("PASS: staged export, success/failure, partial staging rejection, excluded deleted/untracked files, unchanged fixture index; no commits")

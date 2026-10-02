@@ -1,0 +1,1196 @@
+
+FILE lib/atheum/worker/spec.ex
+1: defmodule Atheum.Worker.Spec do
+2:   @moduledoc "The one project-owned image, pinned by content ID and build-source digest."
+3:   @files [
+4:     "worker/Dockerfile",
+5:     "worker/main.exs",
+6:     "lib/atheum/core.ex",
+7:     "lib/atheum/wire.ex",
+8:     "lib/atheum/worker/protocol.ex"
+9:   ]
+10:   def load do
+11:     root = Path.expand("../../..", __DIR__)
+12: 
+13:     with {:ok, bytes} <- File.read(Path.join(root, "worker/image.json")),
+14:          {:ok,
+15:           %{"spec" => "supplier-set-active-v1", "image_id" => id, "source_sha256" => source} =
+16:             spec} <- JSON.decode(bytes),
+17:          true <- Regex.match?(~r/\Asha256:[0-9a-f]{64}\z/, id),
+18:          {:ok, parts} <- sources(root),
+19:          true <- Base.encode16(:crypto.hash(:sha256, parts), case: :lower) == source do
+20:       {:ok, spec}
+21:     else
+22:       _other ->
+23:         {:error,
+24:          %{
+25:            "code" => "worker_image",
+26:            "detail" => "fixed image missing or stale; run scripts/build-worker"
+27:          }}
+28:     end
+29:   end
+30: 
+31:   defp sources(root) do
+32:     Enum.reduce_while(@files, {:ok, []}, fn name, {:ok, parts} ->
+33:       case File.read(Path.join(root, name)) do
+34:         {:ok, bytes} -> {:cont, {:ok, parts ++ [name, <<0>>, bytes]}}
+35:         failure -> {:halt, failure}
+36:       end
+37:     end)
+38:   end
+39: end
+
+FILE lib/atheum/worker/docker.ex
+1: defmodule Atheum.Worker.Docker do
+2:   @moduledoc "Docker shell restricted to persisted project instances and the fixed image."
+3:   alias Atheum.{ProcessIO, Wire}
+4: 
+5:   def verify(spec, config) do
+6:     with {:ok, bytes} <-
+7:            command(["image", "inspect", "--format", "{{json .}}", spec["image_id"]], config),
+8:          {:ok, image} <- Wire.decode(bytes),
+9:          true <- image["Id"] == spec["image_id"],
+10:          true <- image["Config"]["Labels"]["org.acropolis.atheum.source"] == spec["source_sha256"],
+11:          true <- image["Config"]["Labels"]["org.acropolis.atheum.worker_spec"] == spec["spec"] do
+12:       :ok
+13:     else
+14:       _other -> failure("fixed image identity/label mismatch")
+15:     end
+16:   end
+17: 
+18:   def create(instance, config) do
+19:     args = [
+20:       "create",
+21:       "--name",
+22:       instance["instance_name"],
+23:       "--restart=no",
+24:       "--init",
+25:       "--network=none",
+26:       "--read-only",
+27:       "--user=65534:65534",
+28:       "--cap-drop=ALL",
+29:       "--security-opt=no-new-privileges",
+30:       "--pids-limit=64",
+31:       "--memory=128m",
+32:       "--memory-swap=128m",
+33:       "--cpus=0.5",
+34:       "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
+35:       "--label",
+36:       "org.acropolis.atheum.worker=supplier-set-active-v1",
+37:       "--label",
+38:       "org.acropolis.atheum.owner=" <> instance["owner_token"],
+39:       "--label",
+40:       "org.acropolis.atheum.instance_generation=" <> to_string(instance["instance_generation"]),
+41:       "--interactive",
+42:       instance["image_id"],
+43:       instance["instance_name"],
+44:       to_string(instance["instance_generation"])
+45:     ]
+46: 
+47:     command(args, config)
+48:   end
+49: 
+50:   def inspect_owned(instance, config) do
+51:     with {:ok, bytes} <-
+52:            command(["inspect", "--format", "{{json .}}", instance["instance_name"]], config),
+53:          {:ok, object} <- Wire.decode(bytes),
+54:          true <- object["Image"] == instance["image_id"],
+55:          true <-
+56:            object["Config"]["Labels"]["org.acropolis.atheum.owner"] == instance["owner_token"],
+57:          true <-
+58:            object["Config"]["Labels"]["org.acropolis.atheum.worker"] == "supplier-set-active-v1",
+59:          true <-
+60:            object["Config"]["Labels"]["org.acropolis.atheum.instance_generation"] ==
+61:              to_string(instance["instance_generation"]),
+62:          true <- is_nil(instance["container_id"]) or instance["container_id"] == object["Id"] do
+63:       {:ok, object}
+64:     else
+65:       _other -> failure("container ownership/identity unconfirmed")
+66:     end
+67:   end
+68: 
+69:   def absent?(instance, config) do
+70:     case command(
+71:            [
+72:              "container",
+73:              "ls",
+74:              "-a",
+75:              "--filter",
+76:              "name=^/" <> instance["instance_name"] <> "$",
+77:              "--format",
+78:              "{{.ID}}"
+79:            ],
+80:            config
+81:          ) do
+82:       {:ok, ""} -> true
+83:       _other -> false
+84:     end
+85:   end
+86: 
+87:   def remove(instance, config) do
+88:     with {:ok, object} <- inspect_owned(instance, config),
+89:          {:ok, _output} <- command(["rm", "--force", object["Id"]], config),
+90:          true <- absent?(instance, config) do
+91:       {:ok, %{"container_id" => object["Id"], "removed" => true, "worker_stop_confirmed" => true}}
+92:     else
+93:       _other -> failure("owned container removal unconfirmed")
+94:     end
+95:   end
+96: 
+97:   def command(args, config) do
+98:     case ProcessIO.run(config.docker, args, Map.get(config, :docker_timeout_ms, 10_000)) do
+99:       {:ok, bytes, 0} -> {:ok, String.trim(bytes)}
+100:       {:ok, bytes, _status} -> failure(String.trim(bytes))
+101:       {:error, error} -> {:error, error}
+102:     end
+103:   end
+104: 
+105:   defp failure(detail), do: {:error, %{"code" => "worker_docker", "detail" => detail}}
+106: end
+
+FILE lib/atheum/worker/manager.ex
+1: defmodule Atheum.Worker.Manager do
+2:   @moduledoc "Single local lifecycle owner. Worker replacement never implicitly retries a job."
+3:   alias Atheum.{Akashic, Postgres}
+4:   alias Atheum.Worker.{Docker, Protocol, Session, Spec, State}
+5:   @owner_name {__MODULE__, :local}
+6: 
+7:   def run(id, config, opts \\ []), do: dispatch(:run, id, config, opts)
+8:   def recover(id, config, opts \\ []), do: dispatch(:recover, id, config, opts)
+9: 
+10:   defp dispatch(operation, id, config, opts) do
+11:     with_owner(fn ->
+12:       with {:ok, spec} <- Spec.load(),
+13:            :ok <- Docker.verify(spec, config),
+14:            {:ok, token} <- State.reserve(id, config) do
+15:         try do
+16:           apply(Atheum, operation, [id, config, Keyword.put(opts, :runner, {:docker, token})])
+17:         after
+18:           release_if_reclaimed(token, config)
+19:         end
+20:       end
+21:     end)
+22:   end
+23: 
+24:   def execute(row, token, config, opts) do
+25:     with {:ok, spec} <- Spec.load(),
+26:          true <- State.owned?(token, config),
+27:          {:ok, instance} <- State.plan(row, token, spec, config) do
+28:       launch(row, instance, config, opts)
+29:     else
+30:       false -> failure("dispatch ownership lost")
+31:       error -> error
+32:     end
+33:   end
+34: 
+35:   defp launch(row, instance, config, opts) do
+36:     result =
+37:       with {:ok, id} <- Docker.create(instance, config),
+38:            {:ok, created} <- State.record(instance, "created", %{"container_id" => id}, config),
+39:            :ok <- hook(opts, :after_container_created, created),
+40:            {:ok, _object} <- Docker.inspect_owned(created, config),
+41:            {:ok, session} <- Session.open(created, config) do
+42:         try do
+43:           dialogue(row, created, session, config, opts)
+44:         after
+45:           Session.close(session)
+46:         end
+47:       end
+48: 
+49:     case reclaim_instance(instance, config) do
+50:       {:ok, _proof} -> result
+51:       _unconfirmed -> failure("container reclamation unconfirmed; capacity remains reserved")
+52:     end
+53:   end
+54: 
+55:   defp dialogue(row, instance, session, config, opts) do
+56:     ready = Protocol.ready(instance["instance_name"], instance["instance_generation"])
+57:     job = Protocol.job(row, instance["instance_name"])
+58: 
+59:     with {:ok, ^ready, session} <- Session.message(session),
+60:          {:ok, _ready} <- State.record(instance, "ready", ready, config),
+61:          :ok <- hook(opts, :after_worker_ready, instance),
+62:          :ok <- eligible(row, instance, config),
+63:          :ok <- Session.send_message(session, job),
+64:          {:ok, effect, session} <- Session.message(session),
+65:          {:ok, ^effect} <- Protocol.plan(job),
+66:          :ok <- eligible(row, instance, config),
+67:          {:ok, _progress} <-
+68:            State.record(instance, "executing", %{"attempt_id" => row["attempt_id"]}, config) do
+69:       observe_effect(row, instance, job, session, config, opts)
+70:     else
+71:       error -> normalize(error)
+72:     end
+73:   end
+74: 
+75:   defp observe_effect(row, instance, job, session, config, opts) do
+76:     remaining = row["request"]["deadline_ms"] - System.system_time(:millisecond)
+77: 
+78:     outcome =
+79:       Akashic.apply(%{"command" => "apply", "request" => job["request"]}, %{
+80:         config
+81:         | timeout_ms: min(config.timeout_ms, remaining)
+82:       })
+83: 
+84:     observation = Protocol.observation(row["attempt_id"], outcome)
+85: 
+86:     with {:ok, _observed} <- State.record(instance, "effect_observed", observation, config),
+87:          :ok <- hook(opts, :after_host_effect, instance),
+88:          :ok <- Session.send_message(session, observation),
+89:          {:ok, expected} <- Protocol.result(job, observation),
+90:          {:ok, ^expected, session} <- Session.message(session),
+91:          {:ok, _result} <- State.record(instance, "result_received", expected, config),
+92:          :ok <- hook(opts, :after_worker_result, instance),
+93:          :ok <- Session.exited(session),
+94:          {:ok, object} <- Docker.inspect_owned(instance, config),
+95:          true <- object["State"]["Running"] == false and object["State"]["ExitCode"] == 0,
+96:          {:ok, _exited} <- State.record(instance, "exited", %{"exit_code" => 0}, config) do
+97:       outcome
+98:     else
+99:       error -> normalize(error)
+100:     end
+101:   end
+102: 
+103:   defp eligible(row, instance, config) do
+104:     with true <- State.owned?(instance["owner_token"], config),
+105:          {:ok, current} <- Atheum.get(row["invocation_id"], config),
+106:          true <-
+107:            current["attempt_id"] == row["attempt_id"] and
+108:              current["generation"] == row["generation"],
+109:          true <- not current["cancel_requested"],
+110:          true <- System.system_time(:millisecond) < row["request"]["deadline_ms"] do
+111:       :ok
+112:     else
+113:       _other -> failure("job ownership/cancel/deadline blocks dispatch")
+114:     end
+115:   end
+116: 
+117:   def reconcile(config) do
+118:     with_owner(fn ->
+119:       case State.slot(config) do
+120:         {:error, :not_found} -> {:ok, :idle}
+121:         {:ok, slot} -> reconcile_slot(slot, config)
+122:         failure -> failure
+123:       end
+124:     end)
+125:   end
+126: 
+127:   defp reconcile_slot(slot, config) do
+128:     if owner_down?(slot) do
+129:       case State.for_owner(slot["owner_token"], config) do
+130:         {:error, :not_found} -> State.release(slot["owner_token"], config)
+131:         {:ok, instance} -> reconcile_job(slot, instance, config)
+132:         failure -> failure
+133:       end
+134:     else
+135:       failure("previous manager VM may still be alive")
+136:     end
+137:   end
+138: 
+139:   defp reconcile_job(slot, instance, config) do
+140:     with {:ok, proof} <- reclaim_instance(instance, config),
+141:          {:ok, _record} <- mark_orphan(instance, config),
+142:          {:ok, _released} <- State.release(slot["owner_token"], config) do
+143:       {:ok, proof}
+144:     end
+145:   end
+146: 
+147:   defp mark_orphan(instance, config) do
+148:     case Postgres.transition(
+149:            instance["invocation_id"],
+150:            "status IN ('running','unresolved') AND generation=#{instance["job_generation"]} AND attempt_id=#{Postgres.text(instance["attempt_id"])}",
+151:            "status='unresolved',effect_certainty='unknown',error=#{Postgres.value(%{"code" => "worker_orphan", "detail" => "worker reclaimed; effect not disproved"})}",
+152:            "worker_orphan_reclaimed",
+153:            %{"instance_name" => instance["instance_name"]},
+154:            config
+155:          ) do
+156:       {:error, :transition_conflict} -> {:ok, :state_already_changed}
+157:       other -> other
+158:     end
+159:   end
+160: 
+161:   defp reclaim_instance(instance, config) do
+162:     with {:ok, current} <- State.instance(instance["instance_name"], config) do
+163:       reclaim_current(current, config)
+164:     end
+165:   end
+166: 
+167:   defp reclaim_current(%{"phase" => "removed"} = instance, _config),
+168:     do: {:ok, %{"instance_name" => instance["instance_name"], "removed" => true}}
+169: 
+170:   defp reclaim_current(instance, config) do
+171:     case Docker.remove(instance, config) do
+172:       {:ok, proof} -> State.record(instance, "removed", proof, config)
+173:       failure -> reclaim_absent(instance, config, failure)
+174:     end
+175:   end
+176: 
+177:   defp reclaim_absent(instance, config, failure) do
+178:     # Unknown create may still complete later; absence alone cannot release that slot.
+179:     if not is_nil(instance["container_id"]) and Docker.absent?(instance, config) do
+180:       State.record(instance, "removed", %{"removed" => true, "worker_absent" => true}, config)
+181:     else
+182:       failure
+183:     end
+184:   end
+185: 
+186:   defp release_if_reclaimed(token, config) do
+187:     case State.for_owner(token, config) do
+188:       {:error, :not_found} -> State.release(token, config)
+189:       {:ok, %{"phase" => "removed"}} -> State.release(token, config)
+190:       _unresolved -> :ok
+191:     end
+192:   end
+193: 
+194:   defp owner_down?(%{"owner_vm" => vm}) do
+195:     if vm == System.pid() do
+196:       true
+197:     else
+198:       case System.cmd("/bin/ps", ["-p", vm, "-o", "pid="]) do
+199:         {"", 1} -> true
+200:         _other -> false
+201:       end
+202:     end
+203:   end
+204: 
+205:   defp with_owner(callback) do
+206:     if :global.register_name(@owner_name, self()) == :yes do
+207:       try do
+208:         callback.()
+209:       after
+210:         :global.unregister_name(@owner_name)
+211:       end
+212:     else
+213:       {:error, :capacity_busy}
+214:     end
+215:   end
+216: 
+217:   defp hook(opts, name, value), do: Keyword.get(opts, name, fn _value -> :ok end).(value)
+218:   defp normalize({:error, _error} = error), do: error
+219:   defp normalize(_invalid), do: failure("worker protocol/exit mismatch")
+220:   defp failure(detail), do: {:error, %{"code" => "worker_lost", "detail" => detail}}
+221: end
+
+FILE lib/atheum/worker/state.ex
+1: defmodule Atheum.Worker.State do
+2:   @moduledoc "Durable capacity=1 reservation and distinct worker-instance/job-attempt observations."
+3:   alias Atheum.Postgres
+4: 
+5:   def reserve(invocation, config) do
+6:     token = Postgres.id()
+7: 
+8:     sql =
+9:       "INSERT INTO atheum_worker_slots(slot,owner_token,owner_vm,invocation_id) VALUES('local',#{Postgres.text(token)},#{Postgres.text(System.pid())},#{Postgres.text(invocation)}) ON CONFLICT(slot) DO NOTHING RETURNING owner_token"
+10: 
+11:     case Postgres.query(sql, config) do
+12:       {:ok, ^token} -> {:ok, token}
+13:       {:ok, ""} -> {:error, :capacity_busy}
+14:       failure -> failure
+15:     end
+16:   end
+17: 
+18:   def slot(config),
+19:     do: one("SELECT row_to_json(s) FROM atheum_worker_slots s WHERE slot='local'", config)
+20: 
+21:   def release(token, config),
+22:     do:
+23:       Postgres.query(
+24:         "DELETE FROM atheum_worker_slots WHERE slot='local' AND owner_token=#{Postgres.text(token)}",
+25:         config
+26:       )
+27: 
+28:   def plan(row, token, spec, config) do
+29:     name = "atheum-worker-" <> Postgres.id()
+30: 
+31:     sql =
+32:       "INSERT INTO atheum_worker_instances(instance_name,owner_token,invocation_id,execution_id,attempt_id,job_generation,image_id,phase) VALUES(#{Postgres.text(name)},#{Postgres.text(token)},#{Postgres.text(row["invocation_id"])},#{Postgres.text(row["execution_id"])},#{Postgres.text(row["attempt_id"])},#{row["generation"]},#{Postgres.text(spec["image_id"])},'create_intent') RETURNING row_to_json(atheum_worker_instances)"
+33: 
+34:     one(sql, config)
+35:   end
+36: 
+37:   def instance(name, config),
+38:     do:
+39:       one(
+40:         "SELECT row_to_json(i) FROM atheum_worker_instances i WHERE instance_name=#{Postgres.text(name)}",
+41:         config
+42:       )
+43: 
+44:   def for_owner(token, config),
+45:     do:
+46:       one(
+47:         "SELECT row_to_json(i) FROM atheum_worker_instances i WHERE owner_token=#{Postgres.text(token)} ORDER BY instance_generation DESC LIMIT 1",
+48:         config
+49:       )
+50: 
+51:   def record(instance, phase, data, config) do
+52:     container =
+53:       if data["container_id"],
+54:         do: ",container_id=#{Postgres.text(data["container_id"])}",
+55:         else: ""
+56: 
+57:     sql =
+58:       "UPDATE atheum_worker_instances SET phase=#{Postgres.text(phase)},observations=observations || #{Postgres.value([%{"phase" => phase, "data" => data}])},updated_at=clock_timestamp()#{container} WHERE instance_name=#{Postgres.text(instance["instance_name"])} AND owner_token=#{Postgres.text(instance["owner_token"])} RETURNING row_to_json(atheum_worker_instances)"
+59: 
+60:     one(sql, config)
+61:   end
+62: 
+63:   def owned?(token, config) do
+64:     case slot(config) do
+65:       {:ok, %{"owner_token" => ^token}} -> true
+66:       _other -> false
+67:     end
+68:   end
+69: 
+70:   defp one(sql, config) do
+71:     case Postgres.query(sql, config) do
+72:       {:ok, ""} -> {:error, :not_found}
+73:       {:ok, bytes} -> {:ok, JSON.decode!(bytes)}
+74:       failure -> failure
+75:     end
+76:   end
+77: end
+
+FILE lib/atheum/worker/session.ex
+1: defmodule Atheum.Worker.Session do
+2:   @moduledoc "Bounded private Docker stdin/stdout dialogue. No socket, network or host mount."
+3:   alias Atheum.Wire
+4: 
+5:   def open(instance, config) do
+6:     port =
+7:       Port.open({:spawn_executable, String.to_charlist(config.docker)}, [
+8:         :binary,
+9:         :exit_status,
+10:         :use_stdio,
+11:         :stderr_to_stdout,
+12:         args: ["start", "--attach", "--interactive", instance["instance_name"]]
+13:       ])
+14: 
+15:     # A broken attach stdin is an observation failure, not a manager crash.
+16:     Process.unlink(port)
+17: 
+18:     {:ok,
+19:      %{
+20:        port: port,
+21:        buffer: "",
+22:        received: 0,
+23:        deadline: System.monotonic_time(:millisecond) + Map.get(config, :worker_timeout_ms, 15_000)
+24:      }}
+25:   rescue
+26:     error in [ErlangError, ArgumentError] -> failure(Exception.message(error))
+27:   end
+28: 
+29:   def send_message(session, message) do
+30:     bytes = JSON.encode!(message) <> "\n"
+31: 
+32:     if byte_size(bytes) <= 16_384 do
+33:       Port.command(session.port, bytes)
+34:       :ok
+35:     else
+36:       failure("worker input exceeds 16384 bytes")
+37:     end
+38:   rescue
+39:     ArgumentError -> failure("worker stdin unavailable")
+40:   end
+41: 
+42:   def message(session) do
+43:     cond do
+44:       System.monotonic_time(:millisecond) >= session.deadline ->
+45:         failure("worker dialogue timeout")
+46: 
+47:       byte_size(session.buffer) > 65_536 ->
+48:         failure("worker line exceeds 65536 bytes")
+49: 
+50:       String.contains?(session.buffer, "\n") ->
+51:         parse_message(session)
+52: 
+53:       true ->
+54:         receive_more(session)
+55:     end
+56:   end
+57: 
+58:   defp parse_message(session) do
+59:     [line, rest] = String.split(session.buffer, "\n", parts: 2)
+60: 
+61:     with {:ok, value} <- Wire.decode(line), true <- is_map(value) do
+62:       {:ok, value, %{session | buffer: rest}}
+63:     else
+64:       _other -> failure("malformed worker message")
+65:     end
+66:   end
+67: 
+68:   defp receive_more(session) do
+69:     receive do
+70:       {port, {:data, bytes}} when port == session.port ->
+71:         if session.received + byte_size(bytes) > 1_048_576 do
+72:           failure("worker output exceeds 1048576 bytes")
+73:         else
+74:           message(%{
+75:             session
+76:             | buffer: session.buffer <> bytes,
+77:               received: session.received + byte_size(bytes)
+78:           })
+79:         end
+80: 
+81:       {port, {:exit_status, status}} when port == session.port ->
+82:         failure("worker exited before result: #{status}")
+83:     after
+84:       max(session.deadline - System.monotonic_time(:millisecond), 0) ->
+85:         failure("worker dialogue timeout")
+86:     end
+87:   end
+88: 
+89:   def exited(session) do
+90:     if session.buffer != "" do
+91:       failure("unexpected worker trailing output")
+92:     else
+93:       receive do
+94:         {port, {:exit_status, 0}} when port == session.port -> :ok
+95:         {port, _other} when port == session.port -> failure("worker exit/output mismatch")
+96:       after
+97:         max(session.deadline - System.monotonic_time(:millisecond), 0) ->
+98:           failure("worker exit timeout")
+99:       end
+100:     end
+101:   end
+102: 
+103:   def close(session) do
+104:     Port.close(session.port)
+105:   rescue
+106:     ArgumentError -> :ok
+107:   end
+108: 
+109:   defp failure(detail), do: {:error, %{"code" => "worker_lost", "detail" => detail}}
+110: end
+
+FILE lib/atheum/worker/protocol.ex
+1: defmodule Atheum.Worker.Protocol do
+2:   @moduledoc "Pure one-job worker protocol. Only the registered Supplier Function is allowed."
+3:   alias Atheum.{Core, Wire}
+4:   @spec_name "supplier-set-active-v1"
+5: 
+6:   def ready(instance, generation),
+7:     do: %{
+8:       "type" => "ready",
+9:       "instance" => instance,
+10:       "instance_generation" => generation,
+11:       "spec" => @spec_name
+12:     }
+13: 
+14:   def job(row, instance) do
+15:     %{
+16:       "type" => "job",
+17:       "instance" => instance,
+18:       "invocation_id" => row["invocation_id"],
+19:       "execution_id" => row["execution_id"],
+20:       "attempt_id" => row["attempt_id"],
+21:       "generation" => row["generation"],
+22:       "request" => row["request"]["apply"]
+23:     }
+24:   end
+25: 
+26:   def plan(
+27:         %{
+28:           "type" => "job",
+29:           "request" =>
+30:             %{
+31:               "request_id" => id,
+32:               "expected_version" => version,
+33:               "operations" => [%{"op" => "set_active", "id" => supplier, "active" => active}]
+34:             } = request
+35:         } = job
+36:       ) do
+37:     input = %{"supplier_id" => supplier, "active" => active, "expected_version" => version}
+38: 
+39:     if Core.validate(input) == :ok and valid_id?(id) and job_shape?(job) and
+40:          Enum.sort(Map.keys(request)) == ["expected_version", "operations", "request_id"] do
+41:       {:ok, job |> Map.put("type", "effect")}
+42:     else
+43:       failure()
+44:     end
+45:   end
+46: 
+47:   def plan(_job), do: failure()
+48: 
+49:   def result(job, %{
+50:         "type" => "observation",
+51:         "attempt_id" => attempt,
+52:         "outcome" => outcome,
+53:         "exit" => status
+54:       }) do
+55:     with true <- attempt == job["attempt_id"],
+56:          validated <-
+57:            Wire.response(outcome, status, %{"command" => "apply", "request" => job["request"]}),
+58:          true <- validated_outcome?(validated, outcome) do
+59:       {:ok,
+60:        job
+61:        |> Map.delete("request")
+62:        |> Map.put("type", "result")
+63:        |> Map.put("outcome", outcome)
+64:        |> Map.put("exit", status)}
+65:     else
+66:       _other -> failure()
+67:     end
+68:   end
+69: 
+70:   def result(_job, _observation), do: failure()
+71: 
+72:   def observation(attempt, {:ok, result}),
+73:     do: %{
+74:       "type" => "observation",
+75:       "attempt_id" => attempt,
+76:       "outcome" => %{"ok" => true, "result" => %{"apply" => result}},
+77:       "exit" => 0
+78:     }
+79: 
+80:   def observation(attempt, {:error, error}),
+81:     do: %{
+82:       "type" => "observation",
+83:       "attempt_id" => attempt,
+84:       "outcome" => %{"ok" => false, "error" => error},
+85:       "exit" => 2
+86:     }
+87: 
+88:   defp validated_outcome?({:ok, _result}, %{"ok" => true}), do: true
+89:   defp validated_outcome?({:error, error}, %{"ok" => false, "error" => error}), do: true
+90:   defp validated_outcome?(_validated, _outcome), do: false
+91: 
+92:   defp job_shape?(job) do
+93:     Enum.sort(Map.keys(job)) == [
+94:       "attempt_id",
+95:       "execution_id",
+96:       "generation",
+97:       "instance",
+98:       "invocation_id",
+99:       "request",
+100:       "type"
+101:     ] and
+102:       Enum.all?(["attempt_id", "execution_id", "instance", "invocation_id"], &valid_id?(job[&1])) and
+103:       is_integer(job["generation"]) and job["generation"] > 0
+104:   end
+105: 
+106:   defp valid_id?(id),
+107:     do: is_binary(id) and byte_size(id) in 1..128 and String.valid?(id) and String.trim(id) != ""
+108: 
+109:   defp failure,
+110:     do: {:error, %{"code" => "worker_protocol", "detail" => "invalid one-job protocol"}}
+111: end
+
+FILE lib/atheum/process_io.ex
+1: defmodule Atheum.ProcessIO do
+2:   @moduledoc "Bounded local process observation. Closing a Port never proves effect absence."
+3:   @max_output 1_048_576
+4:   @max_timeout 60_000
+5: 
+6:   def run(binary, args, timeout, env \\ [])
+7: 
+8:   def run(binary, args, timeout, env)
+9:       when is_integer(timeout) and timeout > 0 and timeout <= @max_timeout do
+10:     port =
+11:       Port.open({:spawn_executable, String.to_charlist(binary)}, [
+12:         :binary,
+13:         :exit_status,
+14:         :use_stdio,
+15:         :stderr_to_stdout,
+16:         args: args,
+17:         env:
+18:           Enum.map(env, fn {key, value} ->
+19:             {String.to_charlist(key), if(value, do: String.to_charlist(value), else: false)}
+20:           end)
+21:       ])
+22: 
+23:     collect(port, [], 0, System.monotonic_time(:millisecond) + timeout)
+24:   rescue
+25:     error in [ErlangError, ArgumentError] ->
+26:       failure("transport_failure", Exception.message(error))
+27:   end
+28: 
+29:   def run(_binary, _args, _timeout, _env),
+30:     do: failure("invalid_configuration", "timeout must be 1..60000ms")
+31: 
+32:   defp collect(port, chunks, size, deadline) do
+33:     remaining = deadline - System.monotonic_time(:millisecond)
+34: 
+35:     if remaining <= 0 do
+36:       close(port, "timeout", "observation deadline exceeded; process/effect unknown")
+37:     else
+38:       receive do
+39:         {^port, {:data, bytes}} ->
+40:           if size + byte_size(bytes) > @max_output do
+41:             close(port, "output_limit", "process output exceeds 1048576 bytes; effect unknown")
+42:           else
+43:             collect(port, [bytes | chunks], size + byte_size(bytes), deadline)
+44:           end
+45: 
+46:         {^port, {:exit_status, status}} ->
+47:           {:ok, chunks |> Enum.reverse() |> IO.iodata_to_binary(), status}
+48:       after
+49:         remaining ->
+50:           close(port, "timeout", "observation deadline exceeded; process/effect unknown")
+51:       end
+52:     end
+53:   end
+54: 
+55:   defp close(port, code, detail) do
+56:     try do
+57:       Port.close(port)
+58:     rescue
+59:       ArgumentError -> :ok
+60:     end
+61: 
+62:     failure(code, detail)
+63:   end
+64: 
+65:   defp failure(code, detail), do: {:error, %{"code" => code, "detail" => detail}}
+66: end
+
+FILE lib/atheum/akashic.ex
+1: defmodule Atheum.Akashic do
+2:   @moduledoc "Existing Akashic CLI only; bounded observation never proves effect absence."
+3:   alias Atheum.{ProcessIO, Wire}
+4: 
+5:   def apply(request, config) do
+6:     flag = if config.storage == :records, do: "--records-db", else: "--db"
+7:     args = [flag, config.akashic_db, "--json", JSON.encode!(request)]
+8: 
+9:     with {:ok, output, status} <- ProcessIO.run(config.binary, args, config.timeout_ms),
+10:          {:ok, wire} <- Wire.decode(output) do
+11:       Wire.response(wire, status, request)
+12:     end
+13:   end
+14: end
+
+FILE lib/atheum/postgres.ex
+1: defmodule Atheum.Postgres do
+2:   @moduledoc "PostgreSQL shell. psql is a local replaceable adapter; each query is a transaction."
+3:   alias Atheum.ProcessIO
+4: 
+5:   def query(sql, config) do
+6:     with {:ok, connection} <- connection(config.pg_url) do
+7:       execute(sql, config, connection)
+8:     end
+9:   end
+10: 
+11:   def connection(url) when is_binary(url), do: parse_connection(URI.parse(url))
+12:   def connection(_url), do: invalid_connection()
+13: 
+14:   defp parse_connection(%URI{
+15:          scheme: scheme,
+16:          host: host,
+17:          port: port,
+18:          path: path,
+19:          userinfo: user,
+20:          query: nil,
+21:          fragment: nil
+22:        })
+23:        when scheme in ["postgres", "postgresql"] and host in ["localhost", "127.0.0.1"] and
+24:               is_integer(port) and port in 1..65_535 and is_binary(path) and is_binary(user) do
+25:     if Regex.match?(~r/\A\/atheum_[a-zA-Z0-9_]{1,55}\z/, path) and
+26:          Regex.match?(~r/\A[a-zA-Z_][a-zA-Z0-9_]*\z/, user) do
+27:       {:ok, %{host: host, port: port, user: user, database: String.trim_leading(path, "/")}}
+28:     else
+29:       invalid_connection()
+30:     end
+31:   end
+32: 
+33:   defp parse_connection(_uri), do: invalid_connection()
+34: 
+35:   defp invalid_connection,
+36:     do:
+37:       {:error,
+38:        %{
+39:          "code" => "invalid_configuration",
+40:          "detail" =>
+41:            "explicit localhost atheum_ DB URL; query/fragment/password/escaped components forbidden"
+42:        }}
+43: 
+44:   defp execute(sql, config, connection) do
+45:     timeout = Map.get(config, :pg_timeout_ms, Map.get(config, :timeout_ms, 5_000))
+46: 
+47:     if is_integer(timeout) and timeout in 1..60_000 do
+48:       do_execute(sql, config, connection, timeout)
+49:     else
+50:       {:error,
+51:        %{"code" => "invalid_configuration", "detail" => "pg_timeout_ms must be 1..60000ms"}}
+52:     end
+53:   end
+54: 
+55:   defp do_execute(sql, config, connection, timeout) do
+56:     # libpq cannot reinterpret this bare validated DB name as a connection string.
+57:     args = [
+58:       "-X",
+59:       "-q",
+60:       "-A",
+61:       "-t",
+62:       "-w",
+63:       "-v",
+64:       "ON_ERROR_STOP=1",
+65:       "-h",
+66:       connection.host,
+67:       "-p",
+68:       Integer.to_string(connection.port),
+69:       "-U",
+70:       connection.user,
+71:       "-d",
+72:       connection.database,
+73:       "-c",
+74:       "DO $$ BEGIN IF current_database() <> '#{connection.database}' THEN RAISE EXCEPTION 'target DB mismatch'; END IF; END $$; " <>
+75:         sql
+76:     ]
+77: 
+78:     env = [
+79:       {"PGHOSTADDR", nil},
+80:       {"PGSERVICE", nil},
+81:       {"PGSERVICEFILE", nil},
+82:       {"PGDATABASE", nil},
+83:       {"PGHOST", nil},
+84:       {"PGPORT", nil},
+85:       {"PGUSER", nil},
+86:       {"PGOPTIONS", "-c statement_timeout=#{timeout} -c lock_timeout=#{timeout}"},
+87:       {"PGCONNECT_TIMEOUT", Integer.to_string(max(div(timeout + 999, 1000), 1))}
+88:     ]
+89: 
+90:     case ProcessIO.run(config.psql, args, timeout, env) do
+91:       {:ok, output, 0} ->
+92:         {:ok, String.trim(output)}
+93: 
+94:       {:ok, output, _status} ->
+95:         {:error, %{"code" => "journal_failure", "detail" => String.trim(output)}}
+96: 
+97:       {:error, error} ->
+98:         {:error, Map.put(error, "code", "journal_" <> error["code"])}
+99:     end
+100:   end
+101: 
+102:   def value(value),
+103:     do: "convert_from(decode('" <> Base.encode16(JSON.encode!(value)) <> "','hex'),'UTF8')::jsonb"
+104: 
+105:   def text(value), do: "(" <> value(value) <> " #>> '{}')"
+106: 
+107:   def setup(config) do
+108:     query(File.read!(Path.expand("../../priv/schema.sql", __DIR__)), config)
+109:   end
+110: 
+111:   def get(id, config) do
+112:     case query(
+113:            "SELECT row_to_json(i) FROM atheum_invocations i WHERE invocation_id=#{text(id)}",
+114:            config
+115:          ) do
+116:       {:ok, ""} -> {:error, :not_found}
+117:       {:ok, output} -> {:ok, JSON.decode!(output)}
+118:       error -> error
+119:     end
+120:   end
+121: 
+122:   def history(id, config, opts \\ []) do
+123:     after_sequence = Keyword.get(opts, :after_sequence, 0)
+124:     limit = Keyword.get(opts, :limit, 100)
+125: 
+126:     if is_integer(after_sequence) and after_sequence >= 0 and is_integer(limit) and
+127:          limit in 1..100 do
+128:       history_page(id, config, after_sequence, limit)
+129:     else
+130:       {:error, :invalid_pagination}
+131:     end
+132:   end
+133: 
+134:   defp history_page(id, config, after_sequence, limit) do
+135:     case query(
+136:            "SELECT COALESCE(json_agg(e ORDER BY sequence),'[]'::json) FROM (SELECT * FROM atheum_events WHERE invocation_id=#{text(id)} AND sequence>#{after_sequence} ORDER BY sequence LIMIT #{limit}) e",
+137:            config
+138:          ) do
+139:       {:ok, output} -> {:ok, JSON.decode!(output)}
+140:       error -> error
+141:     end
+142:   end
+143: 
+144:   def submit(key, request, config) do
+145:     invocation = id()
+146:     execution = id()
+147: 
+148:     sql = """
+149:     WITH inserted AS (
+150:       INSERT INTO atheum_invocations(invocation_id,execution_id,acceptance_key,request,status)
+151:       VALUES(#{text(invocation)},#{text(execution)},#{text(key)},#{value(request)},'accepted')
+152:       ON CONFLICT(acceptance_key) DO NOTHING RETURNING *
+153:     ), logged AS (
+154:       INSERT INTO atheum_events(invocation_id,kind,data)
+155:       SELECT invocation_id,'accepted',request FROM inserted RETURNING invocation_id
+156:     ) SELECT row_to_json(inserted) FROM inserted;
+157:     """
+158: 
+159:     case query(sql, config) do
+160:       {:ok, ""} ->
+161:         existing_acceptance(key, request, config)
+162: 
+163:       {:ok, output} ->
+164:         {:ok, JSON.decode!(output)}
+165: 
+166:       error ->
+167:         error
+168:     end
+169:   end
+170: 
+171:   defp existing_acceptance(key, request, config) do
+172:     # Separate statement sees a concurrent winner after ON CONFLICT waits.
+173:     with {:ok, output} <-
+174:            query(
+175:              "SELECT row_to_json(i) FROM atheum_invocations i WHERE acceptance_key=#{text(key)}",
+176:              config
+177:            ) do
+178:       row = JSON.decode!(output)
+179: 
+180:       if row["request"]["fingerprint"] == request["fingerprint"],
+181:         do: {:ok, row},
+182:         else: {:error, :acceptance_conflict}
+183:     end
+184:   end
+185: 
+186:   def transition(id, condition, assignments, kind, data, config) do
+187:     sql = """
+188:     WITH changed AS (
+189:       UPDATE atheum_invocations SET #{assignments},updated_at=clock_timestamp()
+190:       WHERE invocation_id=#{text(id)} AND (#{condition}) RETURNING *
+191:     ), logged AS (
+192:       INSERT INTO atheum_events(invocation_id,attempt_id,kind,data)
+193:       SELECT invocation_id,attempt_id,#{text(kind)},#{value(data)} FROM changed RETURNING invocation_id
+194:     ) SELECT row_to_json(changed) FROM changed;
+195:     """
+196: 
+197:     case query(sql, config) do
+198:       {:ok, ""} -> {:error, :transition_conflict}
+199:       {:ok, output} -> {:ok, JSON.decode!(output)}
+200:       error -> error
+201:     end
+202:   end
+203: 
+204:   def id, do: Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
+205: end
+
+FILE lib/atheum.ex
+1: defmodule Atheum do
+2:   @moduledoc "Local experimental service boundary for one Action. No production authorization."
+3:   alias Atheum.{Akashic, Core, Postgres}
+4:   alias Atheum.Worker.Manager
+5: 
+6:   def submit(key, input, config, opts \\ []) do
+7:     with :ok <- Core.validate(input),
+8:          :ok <- valid_key(key) do
+9:       deadline = Keyword.get(opts, :deadline_ms)
+10:       safe_retry = Keyword.get(opts, :safe_retry, false)
+11: 
+12:       if is_integer(deadline) and deadline > System.system_time(:millisecond) and
+13:            is_boolean(safe_retry) do
+14:         target = target(config)
+15: 
+16:         fingerprint = %{
+17:           "action" => "supplier.set_active.v1",
+18:           "input" => input,
+19:           "target" => target,
+20:           "deadline_ms" => deadline,
+21:           "safe_retry" => safe_retry,
+22:           "context" => "local-experiment"
+23:         }
+24: 
+25:         request = %{
+26:           "fingerprint" => fingerprint,
+27:           "deadline_ms" => deadline,
+28:           "safe_retry" => safe_retry,
+29:           "target" => target,
+30:           "apply" => %{
+31:             "request_id" => Postgres.id(),
+32:             "expected_version" => input["expected_version"],
+33:             "operations" => [
+34:               %{"op" => "set_active", "id" => input["supplier_id"], "active" => input["active"]}
+35:             ]
+36:           }
+37:         }
+38: 
+39:         Postgres.submit(key, request, config)
+40:       else
+41:         {:error, :invalid_options}
+42:       end
+43:     end
+44:   end
+45: 
+46:   def get(id, config), do: Postgres.get(id, config)
+47:   def history(id, config, opts \\ []), do: Postgres.history(id, config, opts)
+48: 
+49:   def run(id, config, opts \\ []) do
+50:     with {:ok, row} <- get(id, config),
+51:          :ok <- startable(row, config),
+52:          {:ok, claimed} <- claim(id, "status='accepted' AND NOT cancel_requested", config) do
+53:       perform(claimed, config, opts)
+54:     end
+55:   end
+56: 
+57:   def recover(id, config, opts \\ []) do
+58:     with {:ok, row} <- get(id, config),
+59:          :ok <- Core.recoverable(row, System.system_time(:millisecond), target(config)),
+60:          {:ok, claimed} <-
+61:            claim(
+62:              id,
+63:              "status IN ('running','unresolved') AND NOT cancel_requested AND generation=#{row["generation"]}",
+64:              config
+65:            ) do
+66:       perform(claimed, config, opts)
+67:     end
+68:   end
+69: 
+70:   def cancel(id, config) do
+71:     Postgres.transition(
+72:       id,
+73:       "true",
+74:       "cancel_requested=true,status=CASE WHEN status='accepted' THEN 'stopped' ELSE status END,stop_confirmed=CASE WHEN status='accepted' THEN true ELSE stop_confirmed END",
+75:       "cancel_requested",
+76:       %{"reason" => "user_request"},
+77:       config
+78:     )
+79:   end
+80: 
+81:   defp claim(id, condition, config) do
+82:     attempt = Postgres.id()
+83: 
+84:     Postgres.transition(
+85:       id,
+86:       condition,
+87:       "status='running',attempt_id=#{Postgres.text(attempt)},generation=generation+1,effect_certainty='unknown',result=NULL,error=NULL",
+88:       "call_intent",
+89:       %{"attempt_id" => attempt},
+90:       config
+91:     )
+92:   end
+93: 
+94:   defp perform(row, config, opts) do
+95:     with {:ok, current} <- get(row["invocation_id"], config) do
+96:       if send_blocked?(row, current) do
+97:         finish_blocked(row, config)
+98:       else
+99:         observe_call(row, config, opts)
+100:       end
+101:     end
+102:   end
+103: 
+104:   defp send_blocked?(row, current) do
+105:     current["generation"] != row["generation"] or current["cancel_requested"] or
+106:       System.system_time(:millisecond) >= row["request"]["deadline_ms"]
+107:   end
+108: 
+109:   defp finish_blocked(%{"generation" => 1} = row, config),
+110:     do: finish(row, {"stopped", "not_started", nil, %{"code" => "start_blocked"}}, config, true)
+111: 
+112:   defp finish_blocked(row, config),
+113:     do:
+114:       finish(row, {"unresolved", "unknown", nil, %{"code" => "recovery_blocked"}}, config, false)
+115: 
+116:   defp observe_call(row, config, opts) do
+117:     remaining = row["request"]["deadline_ms"] - System.system_time(:millisecond)
+118: 
+119:     outcome =
+120:       case Keyword.get(opts, :runner, :local) do
+121:         :local ->
+122:           Akashic.apply(%{"command" => "apply", "request" => row["request"]["apply"]}, %{
+123:             config
+124:             | timeout_ms: min(config.timeout_ms, remaining)
+125:           })
+126: 
+127:         {:docker, token} ->
+128:           Manager.execute(row, token, config, opts)
+129: 
+130:         _other ->
+131:           {:error, %{"code" => "invalid_configuration", "detail" => "unknown runner"}}
+132:       end
+133: 
+134:     Keyword.get(opts, :after_effect, fn _outcome -> :ok end).(outcome)
+135:     finish(row, Core.completion(outcome), config, false)
+136:   end
+137: 
+138:   defp finish(row, {status, certainty, result, error}, config, stopped) do
+139:     # A recovered successful request may still be a no-op; result.changed expresses that.
+140:     outcome =
+141:       Postgres.transition(
+142:         row["invocation_id"],
+143:         "generation=#{row["generation"]} AND attempt_id=#{Postgres.text(row["attempt_id"])}",
+144:         "status=#{Postgres.text(status)},effect_certainty=#{Postgres.text(certainty)},result=#{Postgres.value(result)},error=#{Postgres.value(error)},stop_confirmed=#{stopped}",
+145:         "attempt_observed",
+146:         %{
+147:           "status" => status,
+148:           "effect_certainty" => certainty,
+149:           "result" => result,
+150:           "error" => error
+151:         },
+152:         config
+153:       )
+154: 
+155:     case outcome do
+156:       {:error, :transition_conflict} ->
+157:         evidence = %{
+158:           "status" => status,
+159:           "effect_certainty" => certainty,
+160:           "result" => result,
+161:           "error" => error
+162:         }
+163: 
+164:         case Postgres.query(
+165:                "INSERT INTO atheum_events(invocation_id,attempt_id,kind,data) VALUES(#{Postgres.text(row["invocation_id"])},#{Postgres.text(row["attempt_id"])},'stale_attempt_observed',#{Postgres.value(evidence)})",
+166:                config
+167:              ) do
+168:           {:ok, _} -> {:error, :stale_attempt}
+169:           failure -> failure
+170:         end
+171: 
+172:       other ->
+173:         other
+174:     end
+175:   end
+176: 
+177:   defp startable(row, config) do
+178:     cond do
+179:       row["status"] != "accepted" ->
+180:         {:error, :not_accepted}
+181: 
+182:       row["request"]["target"] != target(config) ->
+183:         {:error, :target_changed}
+184: 
+185:       System.system_time(:millisecond) >= row["request"]["deadline_ms"] ->
+186:         {:error, :deadline_expired}
+187: 
+188:       true ->
+189:         :ok
+190:     end
+191:   end
+192: 
+193:   defp target(config),
+194:     do: %{
+195:       "db" => Path.expand(config.akashic_db),
+196:       "identity" => config.akashic_identity,
+197:       "storage" => Atom.to_string(config.storage)
+198:     }
+199: 
+200:   defp valid_key(key) when is_binary(key) and byte_size(key) > 0 and byte_size(key) <= 128,
+201:     do: if(String.valid?(key) and String.trim(key) != "", do: :ok, else: {:error, :invalid_key})
+202: 
+203:   defp valid_key(_), do: {:error, :invalid_key}
+204: end
+
+FILE worker/Dockerfile
+1: FROM elixir:1.20.4-otp-29-slim@sha256:3898ffe18d695e770239e4b342dc6b83136f52da0a37df2298083c03068cfd4e
+2: LABEL org.acropolis.atheum.worker_spec="supplier-set-active-v1"
+3: WORKDIR /app
+4: COPY lib/atheum/core.ex lib/atheum/wire.ex /app/atheum/
+5: COPY lib/atheum/worker/protocol.ex /app/atheum/worker/
+6: COPY worker/main.exs /app/main.exs
+7: USER 65534:65534
+8: ENV HOME=/tmp ERL_CRASH_DUMP=/tmp/erl_crash.dump ELIXIR_ERL_OPTIONS="+S 1:1 +A 1 +SDcpu 1 +SDio 1"
+9: ENTRYPOINT ["elixir", "-r", "/app/atheum/wire.ex", "-r", "/app/atheum/core.ex", "-r", "/app/atheum/worker/protocol.ex", "/app/main.exs"]
+
+FILE .dockerignore
+1: **
+2: !lib/
+3: !lib/atheum/
+4: !lib/atheum/core.ex
+5: !lib/atheum/wire.ex
+6: !lib/atheum/worker/
+7: !lib/atheum/worker/protocol.ex
+8: !worker/
+9: !worker/Dockerfile
+10: !worker/main.exs

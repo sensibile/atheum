@@ -1,0 +1,6 @@
+{
+  "crates/akashic-engine/src/main.rs": "d6e6c2e8b6294a7aef3e1c4e621f1f5cb62d30a894b48b78aff321ac0ba5bef1",
+  "crates/akashic-engine/src/lib.rs": "efb80ea367c7dd39bf743564e7b676e4a904a24252a9d181ea9c1bfba6ae9053",
+  "crates/akashic-engine/src/storage.rs": "e622891367ecddd4b97ffbcfd9211f47822365820f6907a3558649d89b5101c8",
+  "AGENTS.md": "78db8d8f6963ba83f63c82998b9767bd200d66c9a8205528f4683b1380ccb748"
+}

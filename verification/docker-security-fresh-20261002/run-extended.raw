@@ -1,0 +1,206 @@
+DEDICATED_DB atheum_security_fresh_1790909375
+TEMP_ROOT /var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-security-fresh-lmb57jqi
+CREATE DATABASE
+COMMAND ["/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/elixir", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/akashic.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/core.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/postgres.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/process_io.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/wire.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/worker/docker.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/worker/manager.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/worker/protocol.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/worker/session.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/worker/spec.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum/worker/state.ex", "-r", "/Users/tonton/Documents/workspace/alaya/atheum/lib/atheum.ex", "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-security-fresh-20261002/probe_extended.exs"]
+    warning: Atheum.ProcessIO.run/3 is undefined (module Atheum.ProcessIO is not available or is yet to be defined)
+    │
+  9 │     with {:ok, output, status} <- ProcessIO.run(config.binary, args, config.timeout_ms),
+    │                                             ~
+    │
+    └─ lib/atheum/akashic.ex:9:45: Atheum.Akashic.apply/2
+
+    warning: Atheum.Wire.decode/1 is undefined (module Atheum.Wire is not available or is yet to be defined)
+    │
+ 10 │          {:ok, wire} <- Wire.decode(output) do
+    │                              ~
+    │
+    └─ lib/atheum/akashic.ex:10:30: Atheum.Akashic.apply/2
+
+    warning: Atheum.Wire.response/3 is undefined (module Atheum.Wire is not available or is yet to be defined)
+    │
+ 11 │       Wire.response(wire, status, request)
+    │            ~
+    │
+    └─ lib/atheum/akashic.ex:11:12: Atheum.Akashic.apply/2
+
+    warning: Atheum.Wire.valid_result?/1 is undefined (module Atheum.Wire is not available or is yet to be defined)
+    │
+ 33 │     if Wire.valid_result?(result) do
+    │             ~
+    │
+    └─ lib/atheum/core.ex:33:13: Atheum.Core.completion/1
+
+    warning: Atheum.ProcessIO.run/4 is undefined (module Atheum.ProcessIO is not available or is yet to be defined)
+    │
+ 90 │     case ProcessIO.run(config.psql, args, timeout, env) do
+    │                    ~
+    │
+    └─ lib/atheum/postgres.ex:90:20: Atheum.Postgres.do_execute/4
+
+    warning: Atheum.Worker.Spec.load/0 is undefined (module Atheum.Worker.Spec is not available or is yet to be defined)
+    │
+ 12 │       with {:ok, spec} <- Spec.load(),
+    │                                ~
+    │
+    └─ lib/atheum/worker/manager.ex:12:32: Atheum.Worker.Manager.dispatch/4
+    └─ lib/atheum/worker/manager.ex:25:30: Atheum.Worker.Manager.execute/4
+
+    warning: Atheum.Worker.State.reserve/2 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+    │
+ 14 │            {:ok, token} <- State.reserve(id, config) do
+    │                                  ~
+    │
+    └─ lib/atheum/worker/manager.ex:14:34: Atheum.Worker.Manager.dispatch/4
+
+    warning: Atheum.Worker.State.owned?/2 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+    │
+ 26 │          true <- State.owned?(token, config),
+    │                        ~
+    │
+    └─ lib/atheum/worker/manager.ex:26:24: Atheum.Worker.Manager.execute/4
+    └─ lib/atheum/worker/manager.ex:104:24: Atheum.Worker.Manager.eligible/3
+
+    warning: Atheum.Worker.State.plan/4 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+    │
+ 27 │          {:ok, instance} <- State.plan(row, token, spec, config) do
+    │                                   ~
+    │
+    └─ lib/atheum/worker/manager.ex:27:35: Atheum.Worker.Manager.execute/4
+
+    warning: Atheum.Worker.State.record/4 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+    │
+ 38 │            {:ok, created} <- State.record(instance, "created", %{"container_id" => id}, config),
+    │                                    ~
+    │
+    └─ lib/atheum/worker/manager.ex:38:36: Atheum.Worker.Manager.launch/4
+    └─ lib/atheum/worker/manager.ex:60:33: Atheum.Worker.Manager.dialogue/5
+    └─ lib/atheum/worker/manager.ex:68:18: Atheum.Worker.Manager.dialogue/5
+    └─ lib/atheum/worker/manager.ex:86:36: Atheum.Worker.Manager.observe_effect/6
+    └─ lib/atheum/worker/manager.ex:91:34: Atheum.Worker.Manager.observe_effect/6
+    └─ lib/atheum/worker/manager.ex:96:34: Atheum.Worker.Manager.observe_effect/6
+    └─ lib/atheum/worker/manager.ex:172:29: Atheum.Worker.Manager.reclaim_current/2
+    └─ lib/atheum/worker/manager.ex:180:13: Atheum.Worker.Manager.reclaim_absent/3
+
+    warning: Atheum.Worker.Session.open/2 is undefined (module Atheum.Worker.Session is not available or is yet to be defined)
+    │
+ 41 │            {:ok, session} <- Session.open(created, config) do
+    │                                      ~
+    │
+    └─ lib/atheum/worker/manager.ex:41:38: Atheum.Worker.Manager.launch/4
+
+    warning: Atheum.Worker.Session.close/1 is undefined (module Atheum.Worker.Session is not available or is yet to be defined)
+    │
+ 45 │           Session.close(session)
+    │                   ~
+    │
+    └─ lib/atheum/worker/manager.ex:45:19: Atheum.Worker.Manager.launch/4
+
+    warning: Atheum.Worker.Protocol.ready/2 is undefined (module Atheum.Worker.Protocol is not available or is yet to be defined)
+    │
+ 56 │     ready = Protocol.ready(instance["instance_name"], instance["instance_generation"])
+    │                      ~
+    │
+    └─ lib/atheum/worker/manager.ex:56:22: Atheum.Worker.Manager.dialogue/5
+
+    warning: Atheum.Worker.Protocol.job/2 is undefined (module Atheum.Worker.Protocol is not available or is yet to be defined)
+    │
+ 57 │     job = Protocol.job(row, instance["instance_name"])
+    │                    ~
+    │
+    └─ lib/atheum/worker/manager.ex:57:20: Atheum.Worker.Manager.dialogue/5
+
+    warning: Atheum.Worker.Session.message/1 is undefined (module Atheum.Worker.Session is not available or is yet to be defined)
+    │
+ 59 │     with {:ok, ^ready, session} <- Session.message(session),
+    │                                            ~
+    │
+    └─ lib/atheum/worker/manager.ex:59:44: Atheum.Worker.Manager.dialogue/5
+    └─ lib/atheum/worker/manager.ex:64:44: Atheum.Worker.Manager.dialogue/5
+    └─ lib/atheum/worker/manager.ex:90:47: Atheum.Worker.Manager.observe_effect/6
+
+    warning: Atheum.Worker.Session.send_message/2 is undefined (module Atheum.Worker.Session is not available or is yet to be defined)
+    │
+ 63 │          :ok <- Session.send_message(session, job),
+    │                         ~
+    │
+    └─ lib/atheum/worker/manager.ex:63:25: Atheum.Worker.Manager.dialogue/5
+    └─ lib/atheum/worker/manager.ex:88:25: Atheum.Worker.Manager.observe_effect/6
+
+    warning: Atheum.Worker.Protocol.plan/1 is undefined (module Atheum.Worker.Protocol is not available or is yet to be defined)
+    │
+ 65 │          {:ok, ^effect} <- Protocol.plan(job),
+    │                                     ~
+    │
+    └─ lib/atheum/worker/manager.ex:65:37: Atheum.Worker.Manager.dialogue/5
+
+    warning: Atheum.Worker.Protocol.observation/2 is undefined (module Atheum.Worker.Protocol is not available or is yet to be defined)
+    │
+ 84 │     observation = Protocol.observation(row["attempt_id"], outcome)
+    │                            ~
+    │
+    └─ lib/atheum/worker/manager.ex:84:28: Atheum.Worker.Manager.observe_effect/6
+
+    warning: Atheum.Worker.Protocol.result/2 is undefined (module Atheum.Worker.Protocol is not available or is yet to be defined)
+    │
+ 89 │          {:ok, expected} <- Protocol.result(job, observation),
+    │                                      ~
+    │
+    └─ lib/atheum/worker/manager.ex:89:38: Atheum.Worker.Manager.observe_effect/6
+
+    warning: Atheum.Worker.Session.exited/1 is undefined (module Atheum.Worker.Session is not available or is yet to be defined)
+    │
+ 93 │          :ok <- Session.exited(session),
+    │                         ~
+    │
+    └─ lib/atheum/worker/manager.ex:93:25: Atheum.Worker.Manager.observe_effect/6
+
+     warning: Atheum.get/2 is undefined (module Atheum is not available or is yet to be defined). Make sure the module name is correct and has been specified in full (or that an alias has been defined)
+     │
+ 105 │          {:ok, current} <- Atheum.get(row["invocation_id"], config),
+     │                                   ~
+     │
+     └─ lib/atheum/worker/manager.ex:105:35: Atheum.Worker.Manager.eligible/3
+
+     warning: Atheum.Worker.State.slot/1 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+     │
+ 119 │       case State.slot(config) do
+     │                  ~
+     │
+     └─ lib/atheum/worker/manager.ex:119:18: Atheum.Worker.Manager.reconcile/1
+
+     warning: Atheum.Worker.State.for_owner/2 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+     │
+ 129 │       case State.for_owner(slot["owner_token"], config) do
+     │                  ~
+     │
+     └─ lib/atheum/worker/manager.ex:129:18: Atheum.Worker.Manager.reconcile_slot/2
+     └─ lib/atheum/worker/manager.ex:187:16: Atheum.Worker.Manager.release_if_reclaimed/2
+
+     warning: Atheum.Worker.State.release/2 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+     │
+ 130 │         {:error, :not_found} -> State.release(slot["owner_token"], config)
+     │                                       ~
+     │
+     └─ lib/atheum/worker/manager.ex:130:39: Atheum.Worker.Manager.reconcile_slot/2
+     └─ lib/atheum/worker/manager.ex:142:36: Atheum.Worker.Manager.reconcile_job/3
+     └─ lib/atheum/worker/manager.ex:188:37: Atheum.Worker.Manager.release_if_reclaimed/2
+     └─ lib/atheum/worker/manager.ex:189:47: Atheum.Worker.Manager.release_if_reclaimed/2
+
+     warning: Atheum.Worker.State.instance/2 is undefined (module Atheum.Worker.State is not available or is yet to be defined)
+     │
+ 162 │     with {:ok, current} <- State.instance(instance["instance_name"], config) do
+     │                                  ~
+     │
+     └─ lib/atheum/worker/manager.ex:162:34: Atheum.Worker.Manager.reclaim_instance/2
+
+PASS cancel before effect unknown
+PASS cancel recovery refused
+PASS stale actual PG completion fenced
+PASS unknown create remains unknown
+PASS unknown create slot retained
+PASS unknown create reconcile refuses absence
+PASS fixture reservation reclaimed
+PASS real manager idle
+ALL EXTENDED PROBES COMPLETED
+EXIT 0
+DROP DATABASE

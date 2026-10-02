@@ -1,0 +1,70 @@
+[
+  {
+    "command": [
+      "docker",
+      "exec",
+      "atheum-cycle-test-pg-20261002",
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "atheum_docker_independent_20261002",
+      "-At",
+      "-c",
+      "SELECT (SELECT count(*) FROM atheum_worker_slots),(SELECT count(*) FROM atheum_worker_instances),(SELECT count(*) FROM atheum_invocations),(SELECT count(*) FROM atheum_events);"
+    ],
+    "exit": 0,
+    "stdout": "0|0|0|0\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "ps",
+      "-a",
+      "--filter",
+      "label=org.acropolis.atheum.worker=supplier-set-active-v1",
+      "--format",
+      "{{json .}}"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/bin/ps",
+      "-axo",
+      "pid,ppid,command"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "action": "drop owned DB",
+    "exit": 0,
+    "stdout": "DROP DATABASE\n",
+    "stderr": ""
+  },
+  {
+    "action": "remove owned isolated copy",
+    "path": "/tmp/atheum-docker-independent-20261002",
+    "absent": true
+  },
+  {
+    "action": "remove owned isolated copy",
+    "path": "/tmp/atheum-mutation-stale_fence-20261002",
+    "absent": true
+  },
+  {
+    "action": "remove owned isolated copy",
+    "path": "/tmp/atheum-mutation-false_absence-20261002",
+    "absent": true
+  },
+  {
+    "action": "remove owned isolated copy",
+    "path": "/tmp/atheum-mutation-release_unknown_create-20261002",
+    "absent": true
+  }
+]

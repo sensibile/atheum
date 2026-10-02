@@ -1,0 +1,38 @@
+[
+  {
+    "command": "ATHEUM_TEST_PG_URL=postgres://postgres@127.0.0.1:55440/atheum_cycle_test AKASHIC_BINARY=/Users/tonton/Documents/workspace/alaya/akashic/target/debug/akashic ./scripts/check review",
+    "raw": "review-permitted.raw",
+    "exit": 0
+  },
+  {
+    "command": "AKASHIC_BINARY=/Users/tonton/Documents/workspace/alaya/akashic/target/debug/akashic mix test verification/final-independent/final_test.exs verification/final-independent/sensitivity_test.exs --include integration --trace",
+    "raw": "final-independent.raw",
+    "exit": 2,
+    "note": "before adding race test; 11/12 passed"
+  },
+  {
+    "command": "AKASHIC_BINARY=/Users/tonton/Documents/workspace/alaya/akashic/target/debug/akashic mix test verification/final-independent/final_test.exs:188 --include integration --trace",
+    "raw": "cancel-races.raw",
+    "exit": 0
+  },
+  {
+    "command": "AKASHIC_BINARY=/Users/tonton/Documents/workspace/alaya/akashic/target/debug/akashic mix test verification/final-independent/final_test.exs:129 --include integration --trace",
+    "raw": "defect-wire.raw",
+    "exit": 2
+  },
+  {
+    "command": "python3 verification/final-independent/isolated.py",
+    "raw": "isolated-second.raw",
+    "exit": 0
+  },
+  {
+    "command": "python3 scripts/check-hook",
+    "raw": "bundled-hook.raw",
+    "exit": 0
+  },
+  {
+    "command": "psql -X -q -A -t -w -h 127.0.0.1 -p 55440 -U postgres -d atheum_cycle_test -v ON_ERROR_STOP=1 -c \"SELECT json_build_object('database',current_database(),'server',version(),'port',inet_server_port());\"",
+    "raw": "pg-identity.raw",
+    "exit": 0
+  }
+]

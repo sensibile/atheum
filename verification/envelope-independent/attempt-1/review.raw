@@ -1,0 +1,19 @@
+** (Mix) mix format failed due to --check-formatted.
+The following files are not formatted:
+
+[1m[31m/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-l6lbw8u8/test/independent_test.exs
+[0m
+         |
+132 132  |                   "expected_version" => version
+133 133  |                 },
+134     -|                 c, deadline_ms: System.system_time(:millisecond) + 60000, safe_retry: true)
+    134 +|                 c,
+    135 +|                 deadline_ms: System.system_time(:millisecond) + 60000,
+    136 +|                 safe_retry: true
+    137 +|               )
+135 138  |
+136 139  |      assert {:ok, unknown} = Atheum.run(row["invocation_id"], %{c | binary: wrapper})
+         |
+
+
+

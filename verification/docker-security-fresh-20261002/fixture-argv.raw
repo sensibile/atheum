@@ -1,0 +1,5 @@
+["inspect", "--format", "{{json .}}", "atheum-worker-fixture"]
+["inspect", "--format", "{{json .}}", "atheum-worker-fixture"]
+["inspect", "--format", "{{json .}}", "atheum-worker-fixture"]
+["inspect", "--format", "{{json .}}", "atheum-worker-fixture"]
+["image", "inspect", "--format", "{{json .}}", "sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b"]

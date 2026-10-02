@@ -1,0 +1,84 @@
+==> file_system
+Compiling 7 files (.ex)
+Generated file_system app
+==> bunt
+Compiling 2 files (.ex)
+Generated bunt app
+==> jason
+Compiling 10 files (.ex)
+Generated jason app
+==> erlex
+Compiling 2 files (.erl)
+Compiling 2 files (.ex)
+Generated erlex app
+==> dialyxir
+Compiling 70 files (.ex)
+Generated dialyxir app
+==> credo
+Compiling 257 files (.ex)
+Generated credo app
+==> atheum
+Compiling 6 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 14891, max_cases: 1
+Including tags: [:integration]
+
+
+IndependentEnvelopeTest [test/independent_test.exs]
+  * test independent required field, type, exit and duplicate matrix [L#16]MATRIX {"accepted":false,"case":"exit","exit":-1,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":true,"case":"exit","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"exit","exit":1,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"exit","exit":2,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"exit","exit":127,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"exit","exit":-1,"wire":{"error":{"code":"invalid_input","detail":"normal rejection"},"ok":false}}
+MATRIX {"accepted":false,"case":"exit","exit":0,"wire":{"error":{"code":"invalid_input","detail":"normal rejection"},"ok":false}}
+MATRIX {"accepted":false,"case":"exit","exit":1,"wire":{"error":{"code":"invalid_input","detail":"normal rejection"},"ok":false}}
+MATRIX {"accepted":true,"case":"exit","exit":2,"wire":{"error":{"code":"invalid_input","detail":"normal rejection"},"ok":false}}
+MATRIX {"accepted":false,"case":"exit","exit":127,"wire":{"error":{"code":"invalid_input","detail":"normal rejection"},"ok":false}}
+MATRIX {"accepted":false,"case":"missing_ok","exit":0,"wire":{"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"missing_result","exit":0,"wire":{"ok":true}}
+MATRIX {"accepted":false,"case":"missing_error","exit":2,"wire":{"ok":false}}
+MATRIX {"accepted":false,"case":"missing_ok","exit":2,"wire":{"error":{"code":"invalid_input","detail":"normal rejection"}}}
+MATRIX {"accepted":false,"case":"apply_changed","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":null,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_changed","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":"1","difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_changed","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":-1,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_changed","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":[],"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_changed","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":{},"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_changed","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":false,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_difference","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":null,"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_difference","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":"1","version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_difference","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":-1,"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_difference","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":[],"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_difference","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{},"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_difference","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":false,"version":1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_version","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":null,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_version","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":"1","work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_version","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":-1,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_version","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":[],"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_version","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":{},"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_version","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":false,"work":{"recomputed_parts":0,"recomputed_products":0,"visited_relations":0}}}}}
+MATRIX {"accepted":false,"case":"apply_work","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":null}}}}
+MATRIX {"accepted":false,"case":"apply_work","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":"1"}}}}
+MATRIX {"accepted":false,"case":"apply_work","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":-1}}}}
+MATRIX {"accepted":false,"case":"apply_work","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":[]}}}}
+MATRIX {"accepted":false,"case":"apply_work","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":{}}}}}
+MATRIX {"accepted":false,"case":"apply_work","exit":0,"wire":{"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":[],"removed_products":[],"restored":[]},"version":1,"work":false}}}}
+
+  * test independent required field, type, exit and duplicate matrix (4.0ms) [L#16]
+  * test actual changed effect, independently tampered responses, exact receipt and history [L#66]
+  * test actual changed effect, independently tampered responses, exact receipt and history (1.5ms) [L#66]
+
+  1) test actual changed effect, independently tampered responses, exact receipt and history (IndependentEnvelopeTest)
+     test/independent_test.exs:66
+     ** (File.Error) could not read file "/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-l6lbw8u8/priv/schema.sql": no such file or directory
+     code: assert {:ok, _} = Postgres.setup(c)
+     stacktrace:
+       (elixir 1.20.4) lib/file.ex:451: File.read!/2
+       (atheum 0.1.0) lib/atheum/postgres.ex:108: Atheum.Postgres.setup/1
+       test/independent_test.exs:80: (test)
+
+
+Finished in 0.05 seconds (0.00s async, 0.05s sync)
+
+Result: 1/2 passed
+Failed: 1 test

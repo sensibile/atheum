@@ -1,0 +1,54 @@
+Compiling 12 files (.ex)
+Generated atheum app
+Checking 19 source files ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.08 seconds (0.01s to load, 0.07s running 69 checks on 19 files)
+177 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:atheum, :compiler, :crypto, :elixir, :kernel, :mix, :stdlib]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/Users/tonton/Documents/workspace/alaya/atheum/.cache/plts/atheum.plt",
+  files: [~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Akashic.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Core.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Postgres.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.ProcessIO.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Wire.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m1.19s
+done (passed successfully)
+Running ExUnit with seed: 115937, max_cases: 20
+Excluding tags: [:integration]
+
+...............
+Finished in 1.3 seconds (1.3s async, 0.00s sync)
+
+Result: 15 passed, 20 excluded
+Running ExUnit with seed: 922767, max_cases: 20
+Including tags: [:integration]
+
+................WORKER_CONSTRAINTS {"Binds":null,"CapDrop":["ALL"],"Memory":134217728,"MemorySwap":134217728,"NanoCpus":500000000,"NetworkMode":"none","PidsLimit":64,"PortBindings":{},"ReadonlyRootfs":true,"RestartPolicy":{"MaximumRetryCount":0,"Name":"no"},"SecurityOpt":["no-new-privileges"],"Tmpfs":{"/tmp":"rw,noexec,nosuid,size=16m"}}
+WORKER_DURABLE {"instance_name":"atheum-worker-bcf9c4d42868fca10efd014993de9260","instance_generation":49,"owner_token":"0935a5ad4803032e5cd5c874e6877d8d","invocation_id":"cdd0f741bae780f02ae2d98440b4f145","execution_id":"267b2e8637d12e34f5d51c0c599a0f9e","attempt_id":"d74d64d19cec38e4accb12f1415983cb","job_generation":1,"image_id":"sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b","container_id":"e7dbc4427b523797d743f86ba6c24f65ef9876b8626e7383dffeed078b194901","phase":"removed","observations":[{"data": {"container_id": "e7dbc4427b523797d743f86ba6c24f65ef9876b8626e7383dffeed078b194901"}, "phase": "created"}, {"data": {"spec": "supplier-set-active-v1", "type": "ready", "instance": "atheum-worker-bcf9c4d42868fca10efd014993de9260", "instance_generation": 49}, "phase": "ready"}, {"data": {"attempt_id": "d74d64d19cec38e4accb12f1415983cb"}, "phase": "executing"}, {"data": {"exit": 0, "type": "observation", "outcome": {"ok": true, "result": {"apply": {"work": {"recomputed_parts": 0, "visited_relations": 0, "recomputed_products": 0}, "changed": true, "version": 2, "difference": {"restored": [], "newly_blocked": [], "added_products": [], "removed_products": []}}}}, "attempt_id": "d74d64d19cec38e4accb12f1415983cb"}, "phase": "effect_observed"}, {"data": {"exit": 0, "type": "result", "outcome": {"ok": true, "result": {"apply": {"work": {"recomputed_parts": 0, "visited_relations": 0, "recomputed_products": 0}, "changed": true, "version": 2, "difference": {"restored": [], "newly_blocked": [], "added_products": [], "removed_products": []}}}}, "instance": "atheum-worker-bcf9c4d42868fca10efd014993de9260", "attempt_id": "d74d64d19cec38e4accb12f1415983cb", "generation": 1, "execution_id": "267b2e8637d12e34f5d51c0c599a0f9e", "invocation_id": "cdd0f741bae780f02ae2d98440b4f145"}, "phase": "result_received"}, {"data": {"exit_code": 0}, "phase": "exited"}, {"data": {"removed": true, "container_id": "e7dbc4427b523797d743f86ba6c24f65ef9876b8626e7383dffeed078b194901", "worker_stop_confirmed": true}, "phase": "removed"}],"updated_at":"2026-10-02T02:29:58.611325+00:00"}
+..........ENVELOPE_VARIANT {"certainty":"unknown","name":"false_with_success","observed":"unresolved","recovered_version":2,"same_request":true,"wire":{"error":{"code":"invalid_input","detail":"contradiction"},"ok":false,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":2,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":5833041,"read_decode_ns":257417,"validate_ns":36459},"write_work":{"commit_ns":83292,"deletes":0,"delta_ns":208,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":71125,"key_bytes":16,"logical_writes":1,"payload_bytes":1444,"plan_ns":28166,"publish_ns":7291,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"true_with_error","observed":"unresolved","recovered_version":4,"same_request":true,"wire":{"error":{"code":"invalid_input","detail":"contradiction"},"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":4,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":7269208,"read_decode_ns":327500,"validate_ns":39000},"write_work":{"commit_ns":140500,"deletes":0,"delta_ns":167,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":101083,"key_bytes":16,"logical_writes":1,"payload_bytes":2213,"plan_ns":26708,"publish_ns":7667,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"false_with_null_result","observed":"unresolved","recovered_version":6,"same_request":true,"wire":{"error":{"code":"version_conflict","detail":"contradiction"},"ok":false,"result":null}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"true_with_null_error","observed":"unresolved","recovered_version":8,"same_request":true,"wire":{"error":null,"ok":true,"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":8,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":7160625,"read_decode_ns":523541,"validate_ns":35000},"write_work":{"commit_ns":120416,"deletes":0,"delta_ns":166,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":149125,"key_bytes":16,"logical_writes":1,"payload_bytes":3751,"plan_ns":28000,"publish_ns":9958,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"missing_ok","observed":"unresolved","recovered_version":10,"same_request":true,"wire":{"result":{"apply":{"changed":true,"difference":{"added_products":[],"newly_blocked":["P"],"removed_products":[],"restored":[]},"version":10,"work":{"recomputed_parts":1,"recomputed_products":1,"visited_relations":4}},"open_work":{"db_open_ns":6814958,"read_decode_ns":449583,"validate_ns":35417},"write_work":{"commit_ns":129709,"deletes":0,"delta_ns":250,"delta_work":{"blocked_set_entries":0,"constructed_keys":0,"full_map_builds":0,"full_map_records":0,"object_candidates":0,"part_candidates":0,"product_candidates":0,"relation_candidates":0},"encode_ns":179625,"key_bytes":16,"logical_writes":1,"payload_bytes":4522,"plan_ns":28000,"publish_ns":9500,"puts":1}}}}
+ENVELOPE_VARIANT {"certainty":"unknown","name":"incomplete_rejection","observed":"unresolved","recovered_version":12,"same_request":true,"wire":{"error":{"code":"invalid_input"},"ok":false}}
+.........
+Finished in 47.5 seconds (1.3s async, 46.2s sync)
+
+Result: 35 passed
+PASS: artifacts/20261002T022946737549Z-review/report.json

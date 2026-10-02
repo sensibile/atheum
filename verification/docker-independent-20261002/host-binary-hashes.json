@@ -1,0 +1,26 @@
+[
+  {
+    "name": "elixir",
+    "path": "/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/elixir",
+    "resolved": "/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/elixir",
+    "sha256": "5cb23d89a78f75589b06fade3097e217b77e63416d61c1800f674579748c4307"
+  },
+  {
+    "name": "elixirc",
+    "path": "/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/elixirc",
+    "resolved": "/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/elixirc",
+    "sha256": "448cc9ffdc2f23604eccfe370076b5afde6069a97e47dcb8d42fe22d1e169ed1"
+  },
+  {
+    "name": "mix",
+    "path": "/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/mix",
+    "resolved": "/Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/mix",
+    "sha256": "0a48d65a9980f2b923bba597e0ebdde3049e3271089ffffb9265d5cf7954b659"
+  },
+  {
+    "name": "python3",
+    "path": "/usr/local/bin/python3",
+    "resolved": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+    "sha256": "406d73d07e33e164d986326fde00b85c2b8f4ed2c33278142c8431588fe2df14"
+  }
+]

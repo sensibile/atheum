@@ -1,0 +1,5 @@
+{
+  "file": "lib/atheum/wire.ex",
+  "old": "if apply_result?(result, request[\"expected_version\"]), do: {:ok, result}, else: failure()",
+  "new": "_ = request; {:ok, result}"
+}

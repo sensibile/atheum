@@ -1,0 +1,5 @@
+{
+  "file": "lib/atheum/core.ex",
+  "old": "{\"unresolved\", \"unknown\", nil, error}",
+  "new": "{\"failed\", \"confirmed_absent\", nil, error}"
+}

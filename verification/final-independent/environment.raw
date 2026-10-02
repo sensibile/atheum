@@ -1,0 +1,53 @@
+$ ['git', 'status', '--short']
+exit=0
+?? .formatter.exs
+?? .githooks/
+?? .gitignore
+?? DEVELOPMENT_PLAN.md
+?? INITIAL_DESIGN.md
+?? README.md
+?? VERIFICATION.md
+?? lib/
+?? mix.exs
+?? mix.lock
+?? priv/
+?? scripts/
+?? test/
+?? verification/
+
+$ ['git', 'rev-parse', '--verify', 'HEAD']
+exit=128
+fatal: Needed a single revision
+
+$ ['git', 'worktree', 'list', '--porcelain']
+exit=0
+worktree /Users/tonton/Documents/workspace/alaya/atheum
+HEAD 0000000000000000000000000000000000000000
+branch refs/heads/main
+
+
+$ ['git', 'config', '--local', '--get', 'core.hooksPath']
+exit=0
+.githooks
+
+$ ['elixir', '--version']
+exit=0
+Erlang/OTP 29 [erts-17.1] [source] [64-bit] [smp:10:10] [ds:10:10:10] [async-threads:1] [jit]
+
+Elixir 1.20.4 (compiled with Erlang/OTP 29)
+
+$ ['mix', '--version']
+exit=0
+Erlang/OTP 29 [erts-17.1] [source] [64-bit] [smp:10:10] [ds:10:10:10] [async-threads:1] [jit]
+
+Mix 1.20.4 (compiled with Erlang/OTP 29)
+
+$ ['psql', '--version']
+exit=0
+psql (PostgreSQL) 18.6
+
+elixir: /Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/elixir sha256=5cb23d89a78f75589b06fade3097e217b77e63416d61c1800f674579748c4307
+mix: /Users/tonton/.local/share/mise/installs/elixir/1.20.4-otp-29/bin/mix sha256=0a48d65a9980f2b923bba597e0ebdde3049e3271089ffffb9265d5cf7954b659
+psql: /opt/homebrew/Cellar/libpq/18.6/bin/psql sha256=34661328090ed7ac45b804ed5d96b9e0517c5be0bd6131fb5b4ab215bf1eba07
+python3: /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 sha256=406d73d07e33e164d986326fde00b85c2b8f4ed2c33278142c8431588fe2df14
+index=absent

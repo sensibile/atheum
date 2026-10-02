@@ -1,0 +1,57 @@
+{
+  "mode": "review",
+  "steps": [
+    {
+      "command": [
+        "mix",
+        "format",
+        "--check-formatted"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "mix",
+        "compile",
+        "--force",
+        "--warnings-as-errors"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "mix",
+        "credo",
+        "--strict"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "mix",
+        "dialyzer"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "mix",
+        "test",
+        "--warnings-as-errors"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "mix",
+        "test",
+        "--warnings-as-errors",
+        "--include",
+        "integration"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "scope": "Atheum only; actual I/O only in integration/review",
+  "status": "PASS"
+}

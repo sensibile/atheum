@@ -1,0 +1,7 @@
+{
+  "file": "lib/atheum.ex",
+  "old": "Core.completion(outcome)",
+  "new": "{\"stopped\", \"confirmed_absent\", nil, nil}",
+  "before_sha256": "980686ebb361f9f8bf9b6ff798017d87c7dd3ab1be121e6971d5542a984fb6af",
+  "after_sha256": "ee1c3d8cd993d45c19a9cbd28b4008bafed70461319a41d887acdb22cdbb5a6e"
+}

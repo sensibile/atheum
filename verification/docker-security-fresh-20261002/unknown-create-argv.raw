@@ -1,0 +1,7 @@
+["image", "inspect", "--format", "{{json .}}", "sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b"]
+["create", "--name", "atheum-worker-9e29ddc24aa5ed83c2c8ac6fb1ed241b", "--restart=no", "--init", "--network=none", "--read-only", "--user=65534:65534", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64", "--memory=128m", "--memory-swap=128m", "--cpus=0.5", "--tmpfs=/tmp:rw,noexec,nosuid,size=16m", "--label", "org.acropolis.atheum.worker=supplier-set-active-v1", "--label", "org.acropolis.atheum.owner=4caafa1cba57cbbb2990d0fdb917817f", "--label", "org.acropolis.atheum.instance_generation=3", "--interactive", "sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b", "atheum-worker-9e29ddc24aa5ed83c2c8ac6fb1ed241b", "3"]
+["inspect", "--format", "{{json .}}", "atheum-worker-9e29ddc24aa5ed83c2c8ac6fb1ed241b"]
+["inspect", "--format", "{{json .}}", "atheum-worker-9e29ddc24aa5ed83c2c8ac6fb1ed241b"]
+["inspect", "--format", "{{json .}}", "atheum-worker-9e29ddc24aa5ed83c2c8ac6fb1ed241b"]
+["rm", "--force", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+["container", "ls", "-a", "--filter", "name=^/atheum-worker-9e29ddc24aa5ed83c2c8ac6fb1ed241b$", "--format", "{{.ID}}"]

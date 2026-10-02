@@ -1,0 +1,7 @@
+{
+  "file": "lib/atheum/worker/manager.ex",
+  "old": "not is_nil(instance[\"container_id\"]) and Docker.absent?(instance, config)",
+  "new": "Docker.absent?(instance, config)",
+  "before_sha256": "b873f30343807b420a8cd85aea61355603e82c6be729417c1cab25b38500eea6",
+  "after_sha256": "9c4580fdea6efd74645dde86e1dce20da73a5b1497162a58738f6493a6069bf3"
+}

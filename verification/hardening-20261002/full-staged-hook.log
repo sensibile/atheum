@@ -1,0 +1,81 @@
+==> file_system
+Compiling 7 files (.ex)
+Generated file_system app
+==> bunt
+Compiling 2 files (.ex)
+Generated bunt app
+==> jason
+Compiling 10 files (.ex)
+Generated jason app
+==> erlex
+Compiling 2 files (.erl)
+Compiling 2 files (.ex)
+Generated erlex app
+==> dialyxir
+Compiling 70 files (.ex)
+Generated dialyxir app
+==> credo
+Compiling 257 files (.ex)
+Generated credo app
+==> atheum
+Compiling 6 files (.ex)
+Generated atheum app
+Checking 10 source files ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.06 seconds (0.01s to load, 0.05s running 69 checks on 10 files)
+96 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:atheum, :compiler, :crypto, :elixir, :kernel, :mix, :stdlib]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-index-l24ajz3l/.cache/plts/atheum.plt",
+  files: [~c"/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-index-l24ajz3l/_build/dev/lib/atheum/ebin/Elixir.Atheum.Akashic.beam",
+   ~c"/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-index-l24ajz3l/_build/dev/lib/atheum/ebin/Elixir.Atheum.Core.beam",
+   ~c"/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-index-l24ajz3l/_build/dev/lib/atheum/ebin/Elixir.Atheum.Postgres.beam",
+   ~c"/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-index-l24ajz3l/_build/dev/lib/atheum/ebin/Elixir.Atheum.ProcessIO.beam",
+   ~c"/private/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-index-l24ajz3l/_build/dev/lib/atheum/ebin/Elixir.Atheum.Wire.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m1.21s
+done (passed successfully)
+==> file_system
+Compiling 7 files (.ex)
+Generated file_system app
+==> bunt
+Compiling 2 files (.ex)
+Generated bunt app
+==> jason
+Compiling 10 files (.ex)
+Generated jason app
+==> erlex
+Compiling 2 files (.erl)
+Compiling 2 files (.ex)
+Generated erlex app
+==> dialyxir
+Compiling 70 files (.ex)
+Generated dialyxir app
+==> credo
+Compiling 257 files (.ex)
+Generated credo app
+==> atheum
+Compiling 6 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 648403, max_cases: 20
+Excluding tags: [:integration]
+
+..........
+Finished in 1.3 seconds (1.3s async, 0.01s sync)
+
+Result: 10 passed, 13 excluded
+PASS: artifacts/20261002T012202279538Z-precommit/report.json

@@ -1,0 +1,104 @@
+[
+  {
+    "name": "stale_fence",
+    "file": "lib/atheum.ex",
+    "old": "\"generation=#{row[\"generation\"]} AND attempt_id=#{Postgres.text(row[\"attempt_id\"])}\"",
+    "new": "\"true\"",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-stale_fence-3r4hv7gv",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  },
+  {
+    "name": "retry_opt_in",
+    "file": "lib/atheum/core.ex",
+    "old": "not request[\"safe_retry\"] -> {:error, :retry_disabled}",
+    "new": "",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-retry_opt_in-nv4371mi",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  },
+  {
+    "name": "timeout_absence",
+    "file": "lib/atheum/core.ex",
+    "old": "def completion({:error, error}), do: {\"unresolved\", \"unknown\", nil, error}",
+    "new": "def completion({:error, error}), do: {\"failed\", \"confirmed_absent\", nil, error}",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-timeout_absence-axnjoc_1",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  },
+  {
+    "name": "cancel_confirmation",
+    "file": "lib/atheum.ex",
+    "old": "stop_confirmed=CASE WHEN status='accepted' THEN true ELSE stop_confirmed END",
+    "new": "stop_confirmed=true",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-cancel_confirmation-ao_asury",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  },
+  {
+    "name": "acceptance_key",
+    "file": "lib/atheum/postgres.ex",
+    "old": "VALUES(#{text(invocation)},#{text(execution)},#{text(key)},",
+    "new": "VALUES(#{text(invocation)},#{text(execution)},#{text(key <> id())},",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-acceptance_key-uucool_e",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  },
+  {
+    "name": "request_identity",
+    "file": "lib/atheum.ex",
+    "old": "status='running',attempt_id=",
+    "new": "request=jsonb_set(request,'{apply,request_id}',#{Postgres.value(Postgres.id())}),status='running',attempt_id=",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-request_identity-zbd58gs9",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  }
+]

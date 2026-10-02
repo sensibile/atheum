@@ -1,0 +1,7 @@
+{
+  "file": "lib/atheum.ex",
+  "old": "\"generation=#{row[\"generation\"]} AND attempt_id=#{Postgres.text(row[\"attempt_id\"])}\"",
+  "new": "\"true\"",
+  "before_sha256": "980686ebb361f9f8bf9b6ff798017d87c7dd3ab1be121e6971d5542a984fb6af",
+  "after_sha256": "b538314cf044df414b59c6ac4810dd65232e67d4d55fef966ae2b32d7b315051"
+}

@@ -1,0 +1,1 @@
+PASS: staged export, success/failure, partial staging rejection, excluded deleted/untracked files, unchanged fixture index; no commits

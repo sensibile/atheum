@@ -1,0 +1,9 @@
+.env
+.env.local
+x.pem
+x.key
+x.secret
+data/records
+db/CURRENT
+artifacts/raw
+_build/beam

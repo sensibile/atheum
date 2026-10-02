@@ -1,0 +1,19 @@
+[
+  {
+    "name": "stale_fence",
+    "file": "lib/atheum.ex",
+    "old": "\"generation=#{row[\"generation\"]} AND attempt_id=#{Postgres.text(row[\"attempt_id\"])}\"",
+    "new": "\"true\"",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-stale_fence-3r4hv7gv",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  }
+]

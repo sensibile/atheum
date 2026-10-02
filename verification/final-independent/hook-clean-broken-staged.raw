@@ -1,0 +1,28 @@
+$ ['git', '-c', 'core.hooksPath=.githooks', 'hook', 'run', 'pre-commit']
+mix format failed for file: lib/atheum.ex
+** (SyntaxError) invalid syntax found on lib/atheum.ex:196:6:
+     error: syntax error before: 'IS'
+     │
+ 196 │ THIS IS BROKEN ELIXIR
+     │      ^
+     │
+     └─ lib/atheum.ex:196:6
+    (elixir 1.20.4) lib/code.ex:1123: Code.format_string!/2
+    (mix 1.20.4) lib/mix/tasks/format.ex:743: Mix.Tasks.Format.elixir_format/2
+    (mix 1.20.4) lib/mix/tasks/format.ex:764: Mix.Tasks.Format.format_file/2
+    (elixir 1.20.4) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.4) lib/task/supervised.ex:40: Task.Supervised.reply/4
+$ ['git', '-c', 'core.hooksPath=.githooks', 'hook', 'run', 'pre-commit']
+mix format failed for file: lib/atheum.ex
+** (SyntaxError) invalid syntax found on lib/atheum.ex:196:6:
+     error: syntax error before: 'IS'
+     │
+ 196 │ THIS IS BROKEN ELIXIR
+     │      ^
+     │
+     └─ lib/atheum.ex:196:6
+    (elixir 1.20.4) lib/code.ex:1123: Code.format_string!/2
+    (mix 1.20.4) lib/mix/tasks/format.ex:743: Mix.Tasks.Format.elixir_format/2
+    (mix 1.20.4) lib/mix/tasks/format.ex:764: Mix.Tasks.Format.format_file/2
+    (elixir 1.20.4) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+    (elixir 1.20.4) lib/task/supervised.ex:40: Task.Supervised.reply/4

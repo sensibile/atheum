@@ -1,0 +1,46 @@
+{
+  "hook": {
+    "command": [
+      "python3",
+      "scripts/check-hook"
+    ],
+    "exit": 0
+  },
+  "ignore": {
+    "command": [
+      "git",
+      "check-ignore",
+      "--no-index",
+      ".env",
+      ".env.local",
+      "x.pem",
+      "x.key",
+      "x.secret",
+      "data/records",
+      "db/CURRENT",
+      "artifacts/raw",
+      "_build/beam",
+      "verification/independent-20261002/baseline.raw"
+    ],
+    "exit": 0
+  },
+  "index": {
+    "command": [
+      "git",
+      "diff",
+      "--cached",
+      "--name-only"
+    ],
+    "exit": 0
+  },
+  "hook_config": {
+    "command": [
+      "git",
+      "config",
+      "--local",
+      "--get",
+      "core.hooksPath"
+    ],
+    "exit": 0
+  }
+}

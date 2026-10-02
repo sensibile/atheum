@@ -1,0 +1,14 @@
+{
+  "command": [
+    "mix",
+    "test",
+    "test/independent_test.exs",
+    "--exclude",
+    "integration"
+  ],
+  "copy": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-envelope-j96nqk9t",
+  "mutation": "success exit 0 -> 2",
+  "source_before": "dd929de66a074e993f5f6fdc6fb5acdc488de706b9dab602d4a652cb20642ce2",
+  "source_mutated": "e6cd689a81fee2b2cfa165d9b6a6529b743d321b5662b9414ffc58aaa9975cbd",
+  "detected": true
+}

@@ -1,0 +1,26 @@
+    warning: unused alias State
+    │
+  5 │   alias Atheum.Worker.{Docker, Manager, State}
+    │   ~
+    │
+    └─ /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/false_absence_test.exs:5:3
+
+Running ExUnit with seed: 20261002, max_cases: 20
+
+RESOURCE_SAMPLE {"BlockIO":"14.4MB / 0B","CPUPerc":"0.12%","Container":"d0cac1d7642aea0bc30e0a4e7cc998e5d6d31b63329be735e6cd0351c8f522e3","ID":"d0cac1d7642a","MemPerc":"43.69%","MemUsage":"55.92MiB / 128MiB","Name":"atheum-worker-2f3fedbadd5789c8e7e25354b9d154b6","NetIO":"0B / 0B","PIDs":"11"}
+
+
+  1) test independent receipt model and actual epipe (IndependentDockerTest)
+     /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/false_absence_test.exs:80
+     Assertion with == failed
+     code:  assert unknown["status"] == "unresolved"
+     left:  "stopped"
+     right: "unresolved"
+     stacktrace:
+       /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/false_absence_test.exs:89: (test)
+
+
+Finished in 3.0 seconds (0.08s on load, 0.00s async, 3.0s sync)
+
+Result: 0/1 passed
+Failed: 1 test

@@ -1,0 +1,19 @@
+Compiling 6 files (.ex)
+Generated atheum app
+Checking 12 source files ...
+
+  Code Readability                                                              
+┃ 
+┃ [R] ↗ Numbers larger than 9999 should be written with underscores: 60_000
+┃       test/independent_test.exs:135:66 #(IndependentEnvelopeTest)
+┃ [R] ↗ Numbers larger than 9999 should be written with underscores: 10_000
+┃       test/independent_test.exs:77:19 #(IndependentEnvelopeTest)
+┃ [R] ↘ The alias `Atheum.Wire` is not alphabetically ordered among its group.
+┃       test/independent_test.exs:3:17 #(IndependentEnvelopeTest)
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.06 seconds (0.01s to load, 0.05s running 69 checks on 12 files)
+108 mods/funs, found 3 code readability issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.

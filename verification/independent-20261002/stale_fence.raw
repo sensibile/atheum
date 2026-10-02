@@ -1,0 +1,149 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+.......
+
+  1) test older failure cannot replace new successful recovery (IndependentCycleTest)
+     test/independent_test.exs:105
+     match (=) failed
+     code:  assert {:error, :stale_attempt} = Task.await(worker, 10000)
+     left:  {:error, :stale_attempt}
+     right: {:ok,
+             %{
+               "acceptance_key" => "2497393759bdb57f72d1f3e890d51637",
+               "attempt_id" => "363e5f3206987895a4eb6d697c73f667",
+               "cancel_requested" => false,
+               "effect_certainty" => "unknown",
+               "error" => %{
+                 "code" => "transport_failure",
+                 "detail" => "Erlang error: :enoent"
+               },
+               "execution_id" => "d9214fd2b1cee53336c8fadc62b57895",
+               "generation" => 2,
+               "invocation_id" => "0754edf6f627f039ba90c71a0904aaf7",
+               "request" => %{
+                 "apply" => %{
+                   "expected_version" => 1,
+                   "operations" => [
+                     %{
+                       "active" => false,
+                       "id" => "S",
+                       "op" => "set_active"
+                     }
+                   ],
+                   "request_id" => "c2d101e3758d07f1f29ab64ec4533494"
+                 },
+                 "deadline_ms" => 1790902469759,
+                 "fingerprint" => %{
+                   "action" => "supplier.set_active.v1",
+                   "context" => "local-experiment",
+                   "deadline_ms" => 1790902469759,
+                   "input" => %{
+                     "active" => false,
+                     "expected_version" => 1,
+                     "supplier_id" => "S"
+                   },
+                   "safe_retry" => true,
+                   "target" => %{
+                     "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/independent-3ce16e0602f96c6ac5a6604bf5063f45/db",
+                     "identity" => "f31d6db0ae4f93fcc5d58d9cd6325c9b",
+                     "storage" => "snapshot"
+                   }
+                 },
+                 "safe_retry" => true,
+                 "target" => %{
+                   "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/independent-3ce16e0602f96c6ac5a6604bf5063f45/db",
+                   "identity" => "f31d6db0ae4f93fcc5d58d9cd6325c9b",
+                   "storage" => "snapshot"
+                 }
+               },
+               "result" => nil,
+               "status" => "unresolved",
+               "stop_confirmed" => false,
+               "updated_at" => "2026-10-02T00:52:30.095928+00:00"
+             }}
+     stacktrace:
+       test/independent_test.exs:113: (test)
+
+...
+
+  2) test stale worker observation preserves evidence without overwriting recovered state (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:305
+     match (=) failed
+     code:  assert {:error, :stale_attempt} = Task.await(worker, 15000)
+     left:  {:error, :stale_attempt}
+     right: {:ok,
+             %{
+               "acceptance_key" => "cb647f206766f69b52e8d380bde8b7fc",
+               "attempt_id" => "d84053ab2837c8ef9f2a34afafc15d84",
+               "cancel_requested" => false,
+               "effect_certainty" => "confirmed_present",
+               "error" => nil,
+               "execution_id" => "ca460bf3f4969ebc0f0f9675b89e9254",
+               "generation" => 2,
+               "invocation_id" => "589a3771ca3812316f55d4663e0f1700",
+               "request" => %{
+                 "apply" => %{
+                   "expected_version" => 1,
+                   "operations" => [
+                     %{
+                       "active" => false,
+                       "id" => "S1",
+                       "op" => "set_active"
+                     }
+                   ],
+                   "request_id" => "1e7e00f7b575fcaa2580e05bdb02a021"
+                 },
+                 "deadline_ms" => 1790902411346,
+                 "fingerprint" => %{
+                   "action" => "supplier.set_active.v1",
+                   "context" => "local-experiment",
+                   "deadline_ms" => 1790902411346,
+                   "input" => %{
+                     "active" => false,
+                     "expected_version" => 1,
+                     "supplier_id" => "S1"
+                   },
+                   "safe_retry" => true,
+                   "target" => %{
+                     "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-3775a14d81cdbccae9a2d5421856a93a/db",
+                     "identity" => "bee7091f9fc9f4044cb5448537644642",
+                     "storage" => "snapshot"
+                   }
+                 },
+                 "safe_retry" => true,
+                 "target" => %{
+                   "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-3775a14d81cdbccae9a2d5421856a93a/db",
+                   "identity" => "bee7091f9fc9f4044cb5448537644642",
+                   "storage" => "snapshot"
+                 }
+               },
+               "result" => %{
+                 "changed" => true,
+                 "difference" => %{
+                   "added_products" => [],
+                   "newly_blocked" => ["P"],
+                   "removed_products" => [],
+                   "restored" => []
+                 },
+                 "version" => 2,
+                 "work" => %{
+                   "recomputed_parts" => 1,
+                   "recomputed_products" => 1,
+                   "visited_relations" => 4
+                 }
+               },
+               "status" => "succeeded",
+               "stop_confirmed" => false,
+               "updated_at" => "2026-10-02T00:52:31.731323+00:00"
+             }}
+     stacktrace:
+       test/cycle_integration_test.exs:328: (test)
+
+........
+Finished in 10.8 seconds (0.1s async, 10.6s sync)
+
+Result: 18/20 passed
+Failed: 2 tests

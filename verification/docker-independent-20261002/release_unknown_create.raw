@@ -1,0 +1,40 @@
+Running ExUnit with seed: 20261002, max_cases: 20
+
+
+
+  1) test unknown create absent cannot release reservation (IndependentDockerTest)
+     /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/release_unknown_create_test.exs:80
+     match (=) failed
+     code:  assert {:error, _} = Manager.reconcile(c)
+     left:  {:error, _}
+     right: {:ok,
+             %{
+               "attempt_id" => "create-gap",
+               "container_id" => nil,
+               "execution_id" => "f54d9c8be97b8a3c4cd0dadf04e8dda3",
+               "image_id" => "sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b",
+               "instance_generation" => 38,
+               "instance_name" => "atheum-worker-36d0a8046ff9d41129061da16cc8fe51",
+               "invocation_id" => "b207ed2040c50ac232ac4f9df759a25f",
+               "job_generation" => 1,
+               "observations" => [
+                 %{
+                   "data" => %{
+                     "removed" => true,
+                     "worker_absent" => true
+                   },
+                   "phase" => "removed"
+                 }
+               ],
+               "owner_token" => "fd967b5fc18917e73a6245bbcb4e6fa7",
+               "phase" => "removed",
+               "updated_at" => "2026-10-02T02:38:28.527174+00:00"
+             }}
+     stacktrace:
+       /Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/release_unknown_create_test.exs:85: (test)
+
+
+Finished in 0.6 seconds (0.07s on load, 0.00s async, 0.5s sync)
+
+Result: 0/1 passed
+Failed: 1 test

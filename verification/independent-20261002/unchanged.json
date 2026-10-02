@@ -1,0 +1,21 @@
+{
+  "mix.exs": true,
+  "DEVELOPMENT_PLAN.md": true,
+  "INITIAL_DESIGN.md": true,
+  "README.md": true,
+  "VERIFICATION.md": true,
+  ".gitignore": true,
+  ".formatter.exs": true,
+  ".githooks/pre-commit": true,
+  "test/core_test.exs": true,
+  "test/test_helper.exs": true,
+  "test/cycle_integration_test.exs": true,
+  "priv/schema.sql": true,
+  "scripts/check": true,
+  "scripts/check-hook": true,
+  "lib/atheum.ex": true,
+  "lib/atheum/akashic.ex": true,
+  "lib/atheum/core.ex": true,
+  "lib/atheum/postgres.ex": true,
+  "external_binary": true
+}

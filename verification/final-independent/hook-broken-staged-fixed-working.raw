@@ -1,0 +1,4 @@
+$ ['git', '-c', 'core.hooksPath=.githooks', 'hook', 'run', 'pre-commit']
+pre-commit: partial staging/unstaged changes to tracked files are rejected
+$ ['git', '-c', 'core.hooksPath=.githooks', 'hook', 'run', 'pre-commit']
+pre-commit: partial staging/unstaged changes to tracked files are rejected

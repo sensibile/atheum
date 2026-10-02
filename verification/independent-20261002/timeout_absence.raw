@@ -1,0 +1,69 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+..
+
+  1) test timeout and transport failure never prove absence (Atheum.CoreTest)
+     test/core_test.exs:18
+     match (=) failed
+     code:  assert {"unresolved", "unknown", nil, _} = Core.completion({:error, %{"code" => code}})
+     left:  {"unresolved", "unknown", nil, _}
+     right: {"failed", "confirmed_absent", nil, %{"code" => "timeout"}}
+     stacktrace:
+       test/core_test.exs:20: anonymous fn/2 in Atheum.CoreTest."test timeout and transport failure never prove absence"/1
+       (elixir 1.20.4) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+       test/core_test.exs:19: (test)
+
+..
+
+  2) test blocked recovery never launches apply for cancelled or expired unknown (IndependentCycleTest)
+     test/independent_test.exs:75
+     Assertion with == failed
+     code:  assert unchanged["effect_certainty"] == "unknown"
+     left:  "confirmed_absent"
+     right: "unknown"
+     stacktrace:
+       (elixir 1.20.4) lib/enum.ex:1725: Enum."-map/2-lists^map/1-1-"/2
+       test/independent_test.exs:80: (test)
+
+
+
+  3) test response lost after real commit, recover in fresh VM, then fence old result (IndependentCycleTest)
+     test/independent_test.exs:35
+     Assertion with == failed
+     code:  assert {lost["status"], lost["effect_certainty"], lost["stop_confirmed"]} ==
+              {"unresolved", "unknown", false}
+     left:  {"failed", "confirmed_absent", false}
+     right: {"unresolved", "unknown", false}
+     stacktrace:
+       test/independent_test.exs:41: (test)
+
+.......
+
+  4) test opt-in and target identity gate actual replay (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:276
+     match (=) failed
+     code:  assert {:error, :retry_disabled} = Atheum.recover(row["invocation_id"], c)
+     left:  {:error, :retry_disabled}
+     right: {:error, :not_recoverable}
+     stacktrace:
+       test/cycle_integration_test.exs:279: (test)
+
+
+
+  5) test timeout is unknown and exact-payload recovery is safe (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:247
+     Assertion with == failed
+     code:  assert uncertain["status"] == "unresolved"
+     left:  "failed"
+     right: "unresolved"
+     stacktrace:
+       test/cycle_integration_test.exs:268: (test)
+
+..
+Finished in 9.2 seconds (0.2s async, 9.0s sync)
+
+Result: 13/18 passed
+Failed: 5 tests

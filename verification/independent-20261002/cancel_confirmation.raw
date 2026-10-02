@@ -1,0 +1,149 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+.....
+
+  1) test blocked recovery never launches apply for cancelled or expired unknown (IndependentCycleTest)
+     test/independent_test.exs:75
+     Expected false or nil, got true
+     code: refute requested["stop_confirmed"]
+     arguments:
+
+         # 1
+         %{
+           "acceptance_key" => "2340efc192d13297dfd999e81d672045",
+           "attempt_id" => "ef6277b074ebda8a89832cc7ef4f79bb",
+           "cancel_requested" => true,
+           "effect_certainty" => "unknown",
+           "error" => %{
+             "code" => "transport_failure",
+             "detail" => "Erlang error: :enoent"
+           },
+           "execution_id" => "6a41eb45eeeb297955971a23006d3acd",
+           "generation" => 1,
+           "invocation_id" => "352e4aee3441804b43fe8c1f343f1edf",
+           "request" => %{
+             "apply" => %{
+               "expected_version" => 1,
+               "operations" => [
+                 %{
+                   "active" => false,
+                   "id" => "S",
+                   "op" => "set_active"
+                 }
+               ],
+               "request_id" => "aef31b793a45a18e644f95877e464ace"
+             },
+             "deadline_ms" => 1790902341899,
+             "fingerprint" => %{
+               "action" => "supplier.set_active.v1",
+               "context" => "local-experiment",
+               "deadline_ms" => 1790902341899,
+               "input" => %{
+                 "active" => false,
+                 "expected_version" => 1,
+                 "supplier_id" => "S"
+               },
+               "safe_retry" => true,
+               "target" => %{
+                 "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/independent-d210d27753bedac3b65122619e61c930/db",
+                 "identity" => "c0e44efb17065aed89d2af9f0fc0e695",
+                 "storage" => "snapshot"
+               }
+             },
+             "safe_retry" => true,
+             "target" => %{
+               "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/independent-d210d27753bedac3b65122619e61c930/db",
+               "identity" => "c0e44efb17065aed89d2af9f0fc0e695",
+               "storage" => "snapshot"
+             }
+           },
+           "result" => nil,
+           "status" => "unresolved",
+           "stop_confirmed" => true,
+           "updated_at" => "2026-10-02T00:50:22.088461+00:00"
+         }
+
+         # 2
+         "stop_confirmed"
+
+     stacktrace:
+       test/independent_test.exs:85: anonymous fn/5 in IndependentCycleTest."test blocked recovery never launches apply for cancelled or expired unknown"/1
+       (elixir 1.20.4) lib/enum.ex:1725: Enum."-map/2-lists^map/1-1-"/2
+       test/independent_test.exs:80: (test)
+
+..........
+
+  2) test cancel after effect preserves completed effect and refuses recovery replay (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:225
+     Expected false or nil, got true
+     code: refute cancelled["stop_confirmed"]
+     arguments:
+
+         # 1
+         %{
+           "acceptance_key" => "99f1dcd9b584b2fd1e438ab4780f97ef",
+           "attempt_id" => "d9832cda6903fd38c5ac8b01ae5f10ac",
+           "cancel_requested" => true,
+           "effect_certainty" => "unknown",
+           "error" => nil,
+           "execution_id" => "ccc2388cbd7c6ae4cf44f97374dd74bd",
+           "generation" => 1,
+           "invocation_id" => "4cbc0055d00b92591a8c9f67af40fdf1",
+           "request" => %{
+             "apply" => %{
+               "expected_version" => 1,
+               "operations" => [
+                 %{
+                   "active" => false,
+                   "id" => "S1",
+                   "op" => "set_active"
+                 }
+               ],
+               "request_id" => "32f5f9c9827cd12fdfe96d15dfc2b80d"
+             },
+             "deadline_ms" => 1790902288625,
+             "fingerprint" => %{
+               "action" => "supplier.set_active.v1",
+               "context" => "local-experiment",
+               "deadline_ms" => 1790902288625,
+               "input" => %{
+                 "active" => false,
+                 "expected_version" => 1,
+                 "supplier_id" => "S1"
+               },
+               "safe_retry" => true,
+               "target" => %{
+                 "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-7a914cd1945e4911b37c1c562abb7385/db",
+                 "identity" => "79bfab99805579c2b386693cf8e3634b",
+                 "storage" => "snapshot"
+               }
+             },
+             "safe_retry" => true,
+             "target" => %{
+               "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-7a914cd1945e4911b37c1c562abb7385/db",
+               "identity" => "79bfab99805579c2b386693cf8e3634b",
+               "storage" => "snapshot"
+             }
+           },
+           "result" => nil,
+           "status" => "running",
+           "stop_confirmed" => true,
+           "updated_at" => "2026-10-02T00:50:28.823065+00:00"
+         }
+
+         # 2
+         "stop_confirmed"
+
+     stacktrace:
+       test/cycle_integration_test.exs:236: anonymous fn/3 in Atheum.CycleIntegrationTest."test cancel after effect preserves completed effect and refuses recovery replay"/1
+       (atheum 0.1.0) lib/atheum.ex:117: Atheum.perform/3
+       test/cycle_integration_test.exs:232: (test)
+
+.
+Finished in 9.6 seconds (0.1s async, 9.4s sync)
+
+Result: 16/18 passed
+Failed: 2 tests

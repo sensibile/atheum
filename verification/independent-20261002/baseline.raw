@@ -1,0 +1,9 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+..................
+Finished in 11.7 seconds (0.1s async, 11.5s sync)
+
+Result: 18 passed

@@ -1,0 +1,3 @@
+CONFIRMED URL path atheum_decoy is ignored by libpq dbname=atheum_cycle_test; only dedicated fixture DB contacted
+CONFIRMED real PG elapsed_ms=278, config.timeout_ms=10
+CONFIRMED SQL metacharacters, backslash, newline and Korean round-trip as literal text

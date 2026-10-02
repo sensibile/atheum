@@ -1,0 +1,110 @@
+Compiling 4 files (.ex)
+Generated atheum app
+Running ExUnit with seed: 20261002, max_cases: 20
+Including tags: [:integration]
+
+.
+
+  1) test recovery requires opt-in, same target and unexpired uncancelled request (Atheum.CoreTest)
+     test/core_test.exs:35
+     match (=) failed
+     code:  assert {:error, :retry_disabled} =
+              Core.recoverable(put_in(row, ["request", "safe_retry"], false), 99, target)
+     left:  {:error, :retry_disabled}
+     right: :ok
+     stacktrace:
+       test/core_test.exs:51: (test)
+
+......
+
+  2) test independent recovery eligibility truth table (IndependentCycleTest)
+     test/independent_test.exs:25
+     Assertion with == failed
+     code:  assert actual == :ok == permitted
+     left:  true
+     right: false
+     stacktrace:
+       test/independent_test.exs:32: anonymous fn/8 in IndependentCycleTest."test independent recovery eligibility truth table"/1
+       (elixir 1.20.4) lib/enum.ex:2622: Enum."-reduce/3-lists^foldl/2-0-"/3
+       test/independent_test.exs:27: (test)
+
+......
+
+  3) test opt-in and target identity gate actual replay (Atheum.CycleIntegrationTest)
+     test/cycle_integration_test.exs:276
+     match (=) failed
+     code:  assert {:error, :retry_disabled} = Atheum.recover(row["invocation_id"], c)
+     left:  {:error, :retry_disabled}
+     right: {:ok,
+             %{
+               "acceptance_key" => "3faeb9bcded4c65a5912d3fcad6a393a",
+               "attempt_id" => "49665f0390c827a2f4a0b8f57659ecf7",
+               "cancel_requested" => false,
+               "effect_certainty" => "confirmed_present",
+               "error" => nil,
+               "execution_id" => "ac8ed519ccee2ce4c0f66cd6b1333acf",
+               "generation" => 2,
+               "invocation_id" => "f3ae0ec156de84b31ebb86cfddf8e27e",
+               "request" => %{
+                 "apply" => %{
+                   "expected_version" => 1,
+                   "operations" => [
+                     %{
+                       "active" => false,
+                       "id" => "S1",
+                       "op" => "set_active"
+                     }
+                   ],
+                   "request_id" => "a44f00bb16533ba1d3b4144779f0a457"
+                 },
+                 "deadline_ms" => 1790902331639,
+                 "fingerprint" => %{
+                   "action" => "supplier.set_active.v1",
+                   "context" => "local-experiment",
+                   "deadline_ms" => 1790902331639,
+                   "input" => %{
+                     "active" => false,
+                     "expected_version" => 1,
+                     "supplier_id" => "S1"
+                   },
+                   "safe_retry" => false,
+                   "target" => %{
+                     "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-cf960addc41a11d3e2bc1e9d6b4cb045/db",
+                     "identity" => "10fd084725c987359798017dd13146ba",
+                     "storage" => "snapshot"
+                   }
+                 },
+                 "safe_retry" => false,
+                 "target" => %{
+                   "db" => "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-cf960addc41a11d3e2bc1e9d6b4cb045/db",
+                   "identity" => "10fd084725c987359798017dd13146ba",
+                   "storage" => "snapshot"
+                 }
+               },
+               "result" => %{
+                 "changed" => true,
+                 "difference" => %{
+                   "added_products" => [],
+                   "newly_blocked" => ["P"],
+                   "removed_products" => [],
+                   "restored" => []
+                 },
+                 "version" => 2,
+                 "work" => %{
+                   "recomputed_parts" => 1,
+                   "recomputed_products" => 1,
+                   "visited_relations" => 4
+                 }
+               },
+               "status" => "succeeded",
+               "stop_confirmed" => false,
+               "updated_at" => "2026-10-02T00:51:11.973777+00:00"
+             }}
+     stacktrace:
+       test/cycle_integration_test.exs:279: (test)
+
+...
+Finished in 10.6 seconds (0.1s async, 10.5s sync)
+
+Result: 16/19 passed
+Failed: 3 tests

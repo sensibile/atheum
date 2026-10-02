@@ -1,0 +1,33 @@
+Running ExUnit with seed: 20261002, max_cases: 1
+Excluding tags: [:test]
+Including tags: [location: {"verification/final-independent/final_test.exs", 129}]
+
+
+Atheum.FinalIndependentTest [verification/final-independent/final_test.exs]
+  * test independent live worker recovery and stale result fencing [L#70]  * test independent live worker recovery and stale result fencing (excluded) [L#70]
+  * test independent expired recovery cannot retrieve receipt by replay [L#172]  * test independent expired recovery cannot retrieve receipt by replay (excluded) [L#172]
+  * test independent start cancel races retain consistent evidence [L#183]  * test independent start cancel races retain consistent evidence (excluded) [L#183]
+  * test independent cancellation wins before run and recovery stays unknown [L#88]  * test independent cancellation wins before run and recovery stays unknown (excluded) [L#88]
+  * test independent worker death and result journal failure preserve unknown [L#140]  * test independent worker death and result journal failure preserve unknown (excluded) [L#140]
+  * test independent concurrent acceptance stable identities and one event [L#58]  * test independent concurrent acceptance stable identities and one event (excluded) [L#58]
+  * test independent malformed success matrix always remains unknown [L#120]  * test independent malformed success matrix always remains unknown (excluded) [L#120]
+  * test independent PG and CLI output limits; timeout bounds [L#109]  * test independent PG and CLI output limits; timeout bounds (excluded) [L#109]
+  * test independent URL rejection matrix never launches adapter [L#38]  * test independent URL rejection matrix never launches adapter (excluded) [L#38]
+  * test contradictory success and rejection after real effect must remain unknown [L#129]CONTRADICTORY_ACTUAL {"acceptance_key":"d95a274934b4b72b9d6e2b7d7b6a4010","attempt_id":"42eb069ede1cf5789b61e846e3607a6c","cancel_requested":false,"effect_certainty":"confirmed_absent","error":{"code":"invalid_input","detail":"contradictory injected envelope"},"execution_id":"be743156bdd74179e7923eedbe106349","generation":1,"invocation_id":"2de90b082b9676a608fe18da599bd3ef","request":{"apply":{"expected_version":1,"operations":[{"active":false,"id":"S","op":"set_active"}],"request_id":"15d7e76e732e49c3952f5911d0d50cd7"},"deadline_ms":1790905156470,"fingerprint":{"action":"supplier.set_active.v1","context":"local-experiment","deadline_ms":1790905156470,"input":{"active":false,"expected_version":1,"supplier_id":"S"},"safe_retry":true,"target":{"db":"/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-final-ae8af4a1accb24b3bffdc9d9748aaf96/db","identity":"aae1c7e280450551d815c94075063b06","storage":"snapshot"}},"safe_retry":true,"target":{"db":"/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-final-ae8af4a1accb24b3bffdc9d9748aaf96/db","identity":"aae1c7e280450551d815c94075063b06","storage":"snapshot"}},"result":null,"status":"failed","stop_confirmed":false,"updated_at":"2026-10-02T01:38:17.262405+00:00"} ACTUAL_VERSION=2
+CONTRADICTORY_WIRE {"ok": false, "result": {"apply": {"changed": true, "difference": {"added_products": [], "newly_blocked": [], "removed_products": [], "restored": []}, "version": 2, "work": {"recomputed_parts": 0, "recomputed_products": 0, "visited_relations": 0}}, "open_work": {"db_open_ns": 6271041, "read_decode_ns": 229041, "validate_ns": 18375}, "write_work": {"commit_ns": 101250, "deletes": 0, "delta_ns": 42, "delta_work": {"blocked_set_entries": 0, "constructed_keys": 0, "full_map_builds": 0, "full_map_records": 0, "object_candidates": 0, "part_candidates": 0, "product_candidates": 0, "relation_candidates": 0}, "encode_ns": 57708, "key_bytes": 16, "logical_writes": 1, "payload_bytes": 1008, "plan_ns": 16625, "publish_ns": 4167, "puts": 1}}, "error": {"code": "invalid_input", "detail": "contradictory injected envelope"}} RECOVERY={:error, :not_recoverable}
+  * test contradictory success and rejection after real effect must remain unknown (1044.6ms) [L#129]
+
+  1) test contradictory success and rejection after real effect must remain unknown (Atheum.FinalIndependentTest)
+     verification/final-independent/final_test.exs:129
+     Assertion with == failed
+     code:  assert done["status"] == "unresolved"
+     left:  "failed"
+     right: "unresolved"
+     stacktrace:
+       verification/final-independent/final_test.exs:137: (test)
+
+
+Finished in 1.2 seconds (0.00s async, 1.2s sync)
+
+Result: 0/1 passed, 9 excluded
+Failed: 1 test

@@ -1,0 +1,67 @@
+[
+    {
+        "Id": "sha256:3896cfcb76bb1b3ded7ee9cf87689fe1c6a19462a73ddfe8ec9df2e70ed9011b",
+        "RepoTags": [
+            "atheum-worker:local-v1"
+        ],
+        "RepoDigests": [],
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-10-02T11:21:27.277307209+09:00",
+        "Config": {
+            "User": "65534:65534",
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "OTP_VERSION=29.1.1",
+                "REBAR3_VERSION=3.27.0",
+                "ELIXIR_VERSION=v1.20.4",
+                "LANG=C.UTF-8",
+                "HOME=/tmp",
+                "ERL_CRASH_DUMP=/tmp/erl_crash.dump",
+                "ELIXIR_ERL_OPTIONS=+S 1:1 +A 1 +SDcpu 1 +SDio 1"
+            ],
+            "Entrypoint": [
+                "elixir",
+                "-r",
+                "/app/atheum/wire.ex",
+                "-r",
+                "/app/atheum/core.ex",
+                "-r",
+                "/app/atheum/worker/protocol.ex",
+                "/app/main.exs"
+            ],
+            "WorkingDir": "/app",
+            "Labels": {
+                "org.acropolis.atheum.source": "6c45b1d061705ab775854bae792f8f6afef32952e554576b2b2e970f19e70eeb",
+                "org.acropolis.atheum.worker_spec": "supplier-set-active-v1",
+                "org.opencontainers.image.version": "29.1.1"
+            }
+        },
+        "Architecture": "arm64",
+        "Os": "linux",
+        "Size": 333384762,
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/nlot51g7wmuog9ij1klw6gcrp/diff:/var/lib/docker/overlay2/j2aiqrn2bekrztmdk6p15ehu6/diff:/var/lib/docker/overlay2/k2ht70k4wtl1hkjezqvavpab8/diff:/var/lib/docker/overlay2/210488ce05ce14f50d9c5b50c10c9063f1575445af1913884d1160892d5b9aad/diff:/var/lib/docker/overlay2/06c9f6e361394b051562af78228439033323d3d97cf5679fad75e94a8ac17a05/diff:/var/lib/docker/overlay2/04ad06cf86ead048bf47bff5f7f6811e8cbb64dee5b18f6eb07ff1b8d0bd4591/diff",
+                "MergedDir": "/var/lib/docker/overlay2/oj8laq3unqacu3z9w9vikxds3/merged",
+                "UpperDir": "/var/lib/docker/overlay2/oj8laq3unqacu3z9w9vikxds3/diff",
+                "WorkDir": "/var/lib/docker/overlay2/oj8laq3unqacu3z9w9vikxds3/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:fee3d105d5c8439c75356aecdc0d07666e08e0a54147c92eac4fb3572d80e6ac",
+                "sha256:7f6fe2f85a8d56b5e14abd00c50a5e093e7f67a022ac57bd726e1f370c00ca11",
+                "sha256:7487285726c29cf0f090bb7b02fd16f3e6d0393c5c76e16c3778aba0ed53f74a",
+                "sha256:3893c2cb3d2248d171d98f65e46c2564e396cda9ae339061c452afb71af8eb33",
+                "sha256:5c0f5cb22d29d9407d3a597bd130189d759c93c079ac5b37ff9a749b14178420",
+                "sha256:1f98e83abb414f204024b39ad456747e65fd06ac89e498f92ab1390632ac5899",
+                "sha256:d25ac74d827bf0d19212adb24351737a54bc74ab2c3512afeeb6b0e31b13c6bd"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2026-10-02T11:21:27.314510994+09:00"
+        }
+    }
+]

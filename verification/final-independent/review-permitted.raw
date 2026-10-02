@@ -1,0 +1,46 @@
+Compiling 6 files (.ex)
+Generated atheum app
+Checking 10 source files ...
+
+Please report incorrect results: https://github.com/rrrene/credo/issues
+
+Analysis took 0.06 seconds (0.01s to load, 0.05s running 69 checks on 10 files)
+96 mods/funs, found no issues.
+
+Use `mix credo explain` to explain issues, `mix credo --help` for options.
+Finding suitable PLTs
+Checking PLT...
+[:atheum, :compiler, :crypto, :elixir, :kernel, :mix, :stdlib]
+PLT is up to date!
+No :ignore_warnings opt specified in mix.exs and default does not exist.
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/Users/tonton/Documents/workspace/alaya/atheum/.cache/plts/atheum.plt",
+  files: [~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Akashic.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Core.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Postgres.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.ProcessIO.beam",
+   ~c"/Users/tonton/Documents/workspace/alaya/atheum/_build/dev/lib/atheum/ebin/Elixir.Atheum.Wire.beam",
+   ...],
+  ...
+]
+Total errors: 0, Skipped: 0, Unnecessary Skips: 0
+done in 0m1.16s
+done (passed successfully)
+Running ExUnit with seed: 883612, max_cases: 20
+Excluding tags: [:integration]
+
+..........
+Finished in 2.8 seconds (2.8s async, 0.00s sync)
+
+Result: 10 passed, 13 excluded
+Running ExUnit with seed: 159310, max_cases: 20
+Including tags: [:integration]
+
+.......................
+Finished in 9.7 seconds (1.3s async, 8.4s sync)
+
+Result: 23 passed
+PASS: artifacts/20261002T012845648230Z-review/report.json

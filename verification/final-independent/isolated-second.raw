@@ -1,0 +1,109 @@
+[
+  {
+    "name": "fixture-init",
+    "command": [
+      "git",
+      "init",
+      "-q"
+    ],
+    "exit": 0
+  },
+  {
+    "name": "fixture-stage",
+    "command": [
+      "git",
+      "add",
+      "lib",
+      "test",
+      "priv",
+      "scripts",
+      ".githooks",
+      "mix.exs",
+      "mix.lock",
+      ".formatter.exs",
+      ".gitignore"
+    ],
+    "exit": 0
+  },
+  {
+    "name": "hook-valid-full-staged",
+    "command": [
+      "git",
+      "-c",
+      "core.hooksPath=.githooks",
+      "hook",
+      "run",
+      "pre-commit"
+    ],
+    "exit": 0,
+    "index_before": "3a65b89b7e25fdd53d2c428e8ed1d5f8a577559d258c77212a24cf80697b8dc5",
+    "index_after": "3a65b89b7e25fdd53d2c428e8ed1d5f8a577559d258c77212a24cf80697b8dc5"
+  },
+  {
+    "name": "fixture-stage-broken",
+    "command": [
+      "git",
+      "add",
+      "lib/atheum.ex"
+    ],
+    "exit": 0
+  },
+  {
+    "name": "hook-clean-broken-staged",
+    "command": [
+      "git",
+      "-c",
+      "core.hooksPath=.githooks",
+      "hook",
+      "run",
+      "pre-commit"
+    ],
+    "exit": 1,
+    "index_before": "01719a8c9881c3932fa9424e075b8b2ea2a3aea5cd8e1d7dfa3bdb78cadda845",
+    "index_after": "01719a8c9881c3932fa9424e075b8b2ea2a3aea5cd8e1d7dfa3bdb78cadda845"
+  },
+  {
+    "name": "hook-broken-staged-fixed-working",
+    "command": [
+      "git",
+      "-c",
+      "core.hooksPath=.githooks",
+      "hook",
+      "run",
+      "pre-commit"
+    ],
+    "exit": 1,
+    "index_before": "01719a8c9881c3932fa9424e075b8b2ea2a3aea5cd8e1d7dfa3bdb78cadda845",
+    "index_after": "01719a8c9881c3932fa9424e075b8b2ea2a3aea5cd8e1d7dfa3bdb78cadda845"
+  },
+  {
+    "name": "mutation-unknown",
+    "command": [
+      "mix",
+      "test",
+      "test/final_sensitivity_test.exs",
+      "--trace"
+    ],
+    "exit": 2
+  },
+  {
+    "name": "mutation-success",
+    "command": [
+      "mix",
+      "test",
+      "test/final_sensitivity_test.exs",
+      "--trace"
+    ],
+    "exit": 2
+  },
+  {
+    "name": "mutation-url",
+    "command": [
+      "mix",
+      "test",
+      "test/final_sensitivity_test.exs",
+      "--trace"
+    ],
+    "exit": 2
+  }
+]

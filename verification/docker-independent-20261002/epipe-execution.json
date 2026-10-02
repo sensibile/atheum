@@ -1,0 +1,10 @@
+{
+  "command": [
+    "elixir",
+    "-pa",
+    "/tmp/atheum-docker-independent-20261002/_build/test/lib/atheum/ebin",
+    "/Users/tonton/Documents/workspace/alaya/atheum/verification/docker-independent-20261002/epipe_test.exs"
+  ],
+  "exit": 0,
+  "seconds": 4.993884086608887
+}

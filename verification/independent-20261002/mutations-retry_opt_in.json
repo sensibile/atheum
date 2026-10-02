@@ -1,0 +1,19 @@
+[
+  {
+    "name": "retry_opt_in",
+    "file": "lib/atheum/core.ex",
+    "old": "not request[\"safe_retry\"] -> {:error, :retry_disabled}",
+    "new": "",
+    "workspace": "/var/folders/qp/t82xjwzj40scks9jv1nwlhv00000gn/T/atheum-mutant-retry_opt_in-nv4371mi",
+    "command": [
+      "mix",
+      "test",
+      "--include",
+      "integration",
+      "--seed",
+      "20261002"
+    ],
+    "exit": 2,
+    "compile_failure": false
+  }
+]
