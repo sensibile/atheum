@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Push planning and sealed Codex Security evidence gate. No model calls or push."""
+
 import hashlib
 import json
 import os
@@ -11,7 +12,7 @@ from urllib.parse import urlsplit
 
 
 def git(*args):
-    return subprocess.check_output(['git', *args], text=True).strip()
+    return subprocess.check_output(["git", *args], text=True).strip()
 
 
 def digest(path):
@@ -23,11 +24,11 @@ def load(path):
 
 
 def store():
-    return Path(git('rev-parse', '--git-common-dir')).resolve() / 'push-reviews'
+    return Path(git("rev-parse", "--git-common-dir")).resolve() / "push-reviews"
 
 
 def identity(plan):
-    values = [plan[k] for k in ('url', 'ref', 'remote_old', 'head')]
+    values = [plan[k] for k in ("url", "ref", "remote_old", "head")]
     return hashlib.sha256(json.dumps(values).encode()).hexdigest()
 
 
@@ -37,187 +38,443 @@ def require(condition, message):
 
 
 def revision(sha):
-    require(bool(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', sha)), 'full SHA required')
-    require(git('rev-parse', '--verify', sha + '^{commit}') == sha, 'not a commit')
+    require(bool(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha)), "full SHA required")
+    require(git("rev-parse", "--verify", sha + "^{commit}") == sha, "not a commit")
 
 
 def plugin():
-    configured = os.environ.get('CODEX_SECURITY_PLUGIN_DIR')
+    configured = os.environ.get("CODEX_SECURITY_PLUGIN_DIR")
     if not configured:
-        result = subprocess.run(['git', 'config', '--get', 'codex.securityPluginDir'], capture_output=True, text=True)
+        result = subprocess.run(
+            ["git", "config", "--get", "codex.securityPluginDir"],
+            capture_output=True,
+            text=True,
+        )
         configured = result.stdout.strip()
     if configured:
         candidates = [Path(configured).expanduser()]
     else:
-        home = Path(os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))
-        candidates = sorted((home / 'plugins/cache/openai-curated-remote/codex-security').glob('*/scripts/validate_scan_contract.py'), key=lambda p: p.stat().st_mtime, reverse=True)
+        home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+        candidates = sorted(
+            (home / "plugins/cache/openai-curated-remote/codex-security").glob(
+                "*/scripts/validate_scan_contract.py"
+            ),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         candidates = [p.parent.parent for p in candidates]
-    require(bool(candidates), 'Codex Security validator unavailable; set codex.securityPluginDir')
-    validator = candidates[0] / 'scripts/validate_scan_contract.py'
-    require(validator.is_file(), 'Codex Security validator missing')
+    require(
+        bool(candidates),
+        "Codex Security validator unavailable; set codex.securityPluginDir",
+    )
+    validator = candidates[0] / "scripts/validate_scan_contract.py"
+    require(validator.is_file(), "Codex Security validator missing")
     return validator
 
 
 def agent_review(path, plan):
     data = load(path)
-    require(data.get('kind') == 'agent' and data.get('verdict') == 'pass'
-            and data.get('independent') is True and data.get('blocking_findings') == []
-            and data.get('reviewed_base') == plan['scan_base']
-            and data.get('reviewed_head') == plan['head']
-            and bool(data.get('reviewer')) and bool(data.get('summary')),
-            'independent review missing, failed or out of range')
+    require(
+        data.get("kind") == "agent"
+        and data.get("verdict") == "pass"
+        and data.get("independent") is True
+        and data.get("blocking_findings") == []
+        and data.get("reviewed_base") == plan["scan_base"]
+        and data.get("reviewed_head") == plan["head"]
+        and bool(data.get("reviewer"))
+        and bool(data.get("summary")),
+        "independent review missing, failed or out of range",
+    )
 
 
 def repository_location(remote):
     """Optional producer URLs may omit SSH user or use HTTPS instead of SSH."""
-    if '://' in remote:
+    if "://" in remote:
         parsed = urlsplit(remote)
         host, path = parsed.hostname, parsed.path
     else:
-        match = re.fullmatch(r'(?:[^@]+@)?([^:]+):(.+)', remote)
-        require(match is not None, 'unrecognized declared repository location')
+        match = re.fullmatch(r"(?:[^@]+@)?([^:]+):(.+)", remote)
+        require(match is not None, "unrecognized declared repository location")
         host, path = match.groups()
-    require(bool(host) and bool(path), 'invalid declared repository location')
-    return host.lower(), path.strip('/').removesuffix('.git')
+    require(bool(host) and bool(path), "invalid declared repository location")
+    return host.lower(), path.strip("/").removesuffix(".git")
 
 
 def security_review(directory, plan):
     directory = Path(directory).resolve(strict=True)
-    subprocess.run([sys.executable, str(plugin()), '--scan-dir', str(directory)], check=True, stdout=subprocess.DEVNULL)
-    manifest = load(directory / 'scan-manifest.json')
-    scan = manifest['scan']
-    target = scan['target']
-    require(scan['status'] == 'completed' and bool(scan['sealedAt']), 'scan is not completed and sealed')
-    require(scan['producer']['name'] == 'codex-security-plugin', 'unexpected scan producer')
-    require(target['kind'] == 'git_diff' and target['baseRevision'] == plan['scan_base']
-            and target['headRevision'] == plan['head'], 'security scan range mismatch')
+    subprocess.run(
+        [sys.executable, str(plugin()), "--scan-dir", str(directory)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    manifest = load(directory / "scan-manifest.json")
+    scan = manifest["scan"]
+    target = scan["target"]
+    require(
+        scan["status"] == "completed" and bool(scan["sealedAt"]),
+        "scan is not completed and sealed",
+    )
+    require(
+        scan["producer"]["name"] == "codex-security-plugin", "unexpected scan producer"
+    )
+    require(
+        target["kind"] == "git_diff"
+        and target["baseRevision"] == plan["scan_base"]
+        and target["headRevision"] == plan["head"],
+        "security scan range mismatch",
+    )
     # Desktop producer may omit optional remote. Exact full base/head hashes
     # bind the reviewed Git objects; receipt independently binds push destination.
-    if target.get('remote'):
-        require(repository_location(target['remote']) == repository_location(plan['url']),
-                'security repository mismatch')
-    coverage = load(directory / scan['coverageRef'])
-    findings = load(directory / scan['findingsRef'])
-    require(coverage['completeness'] == 'complete' and not coverage['deferred']
-            and not coverage['explicitExclusions'] and not coverage['excludePaths']
-            and coverage['includePaths'] == ['.']
-            and coverage['mode'] in ('diff', 'commit', 'branch_diff')
-            and not any(s['disposition'] == 'needs_follow_up' for s in coverage['surfaces']),
-            'incomplete or narrowed security coverage')
-    require(not findings['findings'], 'security findings block push; fix and rescan')
-    return {'directory': str(directory), 'manifest_sha256': digest(directory / 'scan-manifest.json')}
+    if target.get("remote"):
+        require(
+            repository_location(target["remote"]) == repository_location(plan["url"]),
+            "security repository mismatch",
+        )
+    coverage = load(directory / scan["coverageRef"])
+    findings = load(directory / scan["findingsRef"])
+    require(
+        coverage["completeness"] == "complete"
+        and not coverage["deferred"]
+        and not coverage["explicitExclusions"]
+        and not coverage["excludePaths"]
+        and coverage["includePaths"] == ["."]
+        and coverage["mode"] in ("diff", "commit", "branch_diff")
+        and not any(
+            s["disposition"] == "needs_follow_up" for s in coverage["surfaces"]
+        ),
+        "incomplete or narrowed security coverage",
+    )
+    require(not findings["findings"], "security findings block push; fix and rescan")
+    return {
+        "directory": str(directory),
+        "manifest_sha256": digest(directory / "scan-manifest.json"),
+    }
 
 
 def safe_push_url(url):
     # Credentials belong in a credential helper, never in persisted evidence.
-    if '://' in url:
+    if "://" in url:
         parsed = urlsplit(url)
-        require(not parsed.password, 'push URL credentials are forbidden; use a credential helper')
-        if parsed.scheme in ('http', 'https'):
-            require(parsed.username is None and not parsed.query and not parsed.fragment,
-                    'HTTP push URL must not contain userinfo, query or fragment')
+        require(
+            not parsed.password,
+            "push URL credentials are forbidden; use a credential helper",
+        )
+        if parsed.scheme in ("http", "https"):
+            require(
+                parsed.username is None and not parsed.query and not parsed.fragment,
+                "HTTP push URL must not contain userinfo, query or fragment",
+            )
+    if url.startswith("file:"):
+        parsed = urlsplit(url)
+        require(
+            parsed.netloc in ("", "localhost") and Path(parsed.path).is_absolute(),
+            "file push URL must name an absolute local path",
+        )
+    elif "://" not in url:
+        require(
+            Path(url).is_absolute() or re.fullmatch(r"(?:[^/@:]+@)?[^/:]+:.+", url),
+            "relative local push URL is forbidden; use an absolute destination",
+        )
     return url
+
+
+def ordinary_objects():
+    # Replacements/grafts alter inspection, but are not the objects Git transfers.
+    require(
+        not git("for-each-ref", "--format=%(refname)", "refs/replace/"),
+        "Git replacement objects are forbidden; remove them before review",
+    )
+    grafts = Path(git("rev-parse", "--git-path", "info/grafts"))
+    require(
+        not grafts.exists() or not grafts.read_text().strip(),
+        "Git grafts are forbidden; remove them before review",
+    )
+    require(
+        not os.environ.get("GIT_REPLACE_REF_BASE"),
+        "custom Git replacement namespace is forbidden",
+    )
+
+
+def push_destination(remote, url):
+    safe_push_url(url)
+    if remote in git("remote").splitlines():
+        urls = git("remote", "get-url", "--push", "--all", remote).splitlines()
+        require(len(urls) == 1, "one push URL required at push time")
+        require(urls[0] == url, "push destination changed since preparation")
+    else:
+        require(remote == url, "unknown push remote")
+
+
+def changed_gitlinks(plan):
+    parts = git(
+        "diff",
+        "--raw",
+        "--no-abbrev",
+        "-z",
+        "--no-renames",
+        plan["scan_base"],
+        plan["head"],
+    ).split("\0")
+    links = {}
+    for index in range(0, len(parts) - 1, 2):
+        oldmode, newmode, old, new, status = parts[index].split()
+        if newmode == "160000":
+            require(
+                oldmode == ":160000",
+                "new submodule needs an explicit initial security baseline; unsupported",
+            )
+            links[parts[index + 1]] = (old, new)
+    return links
+
+
+def submodule_reviews(plan, evidence):
+    links = changed_gitlinks(plan)
+    require(
+        set(evidence) == set(links),
+        "changed submodules require separate registered review evidence",
+    )
+    env = os.environ.copy()
+    for key in git("rev-parse", "--local-env-vars").splitlines():
+        env.pop(key, None)
+    for path, (base, head) in links.items():
+        item = evidence[path]
+        receipt = Path(item["receipt_path"]).resolve(strict=True)
+        require(digest(receipt) == item["receipt_sha256"], "submodule receipt changed")
+        repository = Path(item["repository"]).resolve(strict=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "verify-submodule",
+                str(receipt),
+                base,
+                head,
+            ],
+            cwd=repository,
+            env=env,
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
 
 
 def advertised_refs(url, ref):
     safe_push_url(url)
-    return dict(line.split()[::-1] for line in git('ls-remote', url, ref, 'refs/heads/main').splitlines())
+    return dict(
+        line.split()[::-1]
+        for line in git("ls-remote", url, ref, "refs/heads/main").splitlines()
+    )
 
 
 def validate_plan(plan):
-    require(plan.get('version') == 2, 'unsupported push plan')
-    require(plan['ref'].startswith('refs/heads/') and plan['ref'] != 'refs/heads/main', 'use a feature branch and PR')
-    safe_push_url(plan['url'])
-    revision(plan['head'])
-    revision(plan['scan_base'])
-    if set(plan['remote_old']) != {'0'}:
-        require(plan['scan_base'] == plan['remote_old'], 'existing branch base mismatch')
-        revision(plan['remote_old'])
+    ordinary_objects()
+    require(plan.get("version") == 2, "unsupported push plan")
+    require(
+        plan["ref"].startswith("refs/heads/") and plan["ref"] != "refs/heads/main",
+        "use a feature branch and PR",
+    )
+    safe_push_url(plan["url"])
+    revision(plan["head"])
+    revision(plan["scan_base"])
+    if set(plan["remote_old"]) != {"0"}:
+        require(
+            plan["scan_base"] == plan["remote_old"], "existing branch base mismatch"
+        )
+        revision(plan["remote_old"])
     else:
-        refs = advertised_refs(plan['url'], plan['ref'])
-        require(refs.get(plan['ref'], '0' * len(plan['head'])) == plan['remote_old'],
-                'destination branch changed; prepare and review again')
-        require(refs.get('refs/heads/main') == plan['remote_main'],
-                'remote main baseline changed or forged; prepare and review again')
-        revision(plan['remote_main'])
-        require(git('merge-base', plan['remote_main'], plan['head']) == plan['scan_base'], 'new branch baseline mismatch')
+        refs = advertised_refs(plan["url"], plan["ref"])
+        require(
+            refs.get(plan["ref"], "0" * len(plan["head"])) == plan["remote_old"],
+            "destination branch changed; prepare and review again",
+        )
+        require(
+            refs.get("refs/heads/main") == plan["remote_main"],
+            "remote main baseline changed or forged; prepare and review again",
+        )
+        revision(plan["remote_main"])
+        require(
+            git("merge-base", plan["remote_main"], plan["head"]) == plan["scan_base"],
+            "new branch baseline mismatch",
+        )
 
 
-def check_record(record):
-    plan = record['plan']
-    validate_plan(plan)
-    security = security_review(record['security']['directory'], plan)
-    require(security == record['security'], 'security evidence changed since registration')
-    path = record['agent']['path']
-    require(digest(path) == record['agent']['sha256'], 'agent evidence changed since registration')
+def check_record(record, delivered=False):
+    plan = record["plan"]
+    if delivered:
+        # A child's successful push changes the destination ref; retain its
+        # exact reviewed range while verifying remote reachability separately.
+        ordinary_objects()
+        revision(plan["head"])
+        revision(plan["scan_base"])
+    else:
+        validate_plan(plan)
+    security = security_review(record["security"]["directory"], plan)
+    require(
+        security == record["security"], "security evidence changed since registration"
+    )
+    path = record["agent"]["path"]
+    require(
+        digest(path) == record["agent"]["sha256"],
+        "agent evidence changed since registration",
+    )
     agent_review(path, plan)
+    submodule_reviews(plan, record.get("submodules", {}))
 
 
 def main():
     mode = sys.argv[1]
-    if mode == 'prepare':
-        remote = sys.argv[2] if len(sys.argv) > 2 else 'origin'
-        branch = sys.argv[3] if len(sys.argv) > 3 else git('branch', '--show-current')
-        require(branch and branch != 'main', 'use a feature branch and PR')
-        subprocess.run(['git', 'check-ref-format', '--branch', branch], check=True, stdout=subprocess.DEVNULL)
-        require(not git('status', '--porcelain'), 'commit intended changes before preparing push')
-        ref = 'refs/heads/' + branch
-        head = git('rev-parse', ref + '^{commit}')
-        url = git('remote', 'get-url', '--push', '--all', remote)
-        require(len(url.splitlines()) == 1, 'one push URL required')
+    if mode == "prepare":
+        ordinary_objects()
+        remote = sys.argv[2] if len(sys.argv) > 2 else "origin"
+        branch = sys.argv[3] if len(sys.argv) > 3 else git("branch", "--show-current")
+        require(branch and branch != "main", "use a feature branch and PR")
+        subprocess.run(
+            ["git", "check-ref-format", "--branch", branch],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        require(
+            not git("status", "--porcelain"),
+            "commit intended changes before preparing push",
+        )
+        ref = "refs/heads/" + branch
+        head = git("rev-parse", ref + "^{commit}")
+        url = git("remote", "get-url", "--push", "--all", remote)
+        require(len(url.splitlines()) == 1, "one push URL required")
         refs = advertised_refs(url, ref)
-        old = refs.get(ref, '0' * len(head))
-        plan = {'version': 2, 'url': url, 'ref': ref, 'remote_old': old, 'head': head}
-        if set(old) == {'0'}:
-            main_sha = refs.get('refs/heads/main')
-            require(main_sha is not None, 'new branch needs an existing remote main baseline')
-            revision(main_sha)  # fetch if the advertised commit is not locally available
-            plan['remote_main'] = main_sha
-            plan['scan_base'] = git('merge-base', main_sha, head)
+        old = refs.get(ref, "0" * len(head))
+        plan = {"version": 2, "url": url, "ref": ref, "remote_old": old, "head": head}
+        if set(old) == {"0"}:
+            main_sha = refs.get("refs/heads/main")
+            require(
+                main_sha is not None,
+                "new branch needs an existing remote main baseline",
+            )
+            revision(
+                main_sha
+            )  # fetch if the advertised commit is not locally available
+            plan["remote_main"] = main_sha
+            plan["scan_base"] = git("merge-base", main_sha, head)
         else:
-            plan['scan_base'] = old
+            plan["scan_base"] = old
         validate_plan(plan)
-        folder = store() / 'plans'
+        folder = store() / "plans"
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / (identity(plan) + '.json')
-        path.write_text(json.dumps(plan, indent=2) + '\n')
-        print('Push plan:', path)
-        print('Codex: run $codex-security:security-diff-scan on the unchanged range', plan['scan_base'], '..', head)
-        print('Then run an independent review on the same range. Do not edit, commit or push during either review.')
-        print('Register: ./scripts/review-gate record', path, 'COMPLETED_SCAN_DIR AGENT_JSON')
-        print('No scan, model call or push was executed.')
-    elif mode == 'record':
-        require(len(sys.argv) == 5, 'record PLAN_JSON COMPLETED_SCAN_DIR AGENT_JSON; manual security pass is not accepted')
+        path = folder / (identity(plan) + ".json")
+        path.write_text(json.dumps(plan, indent=2) + "\n")
+        print("Push plan:", path)
+        print(
+            "Codex: run $codex-security:security-diff-scan on the unchanged range",
+            plan["scan_base"],
+            "..",
+            head,
+        )
+        print(
+            "Then run an independent review on the same range. Do not edit, commit or push during either review."
+        )
+        print(
+            "Register: ./scripts/review-gate record",
+            path,
+            "COMPLETED_SCAN_DIR AGENT_JSON",
+        )
+        print("No scan, model call or push was executed.")
+    elif mode == "record":
+        require(
+            len(sys.argv) in (5, 6),
+            "record PLAN_JSON COMPLETED_SCAN_DIR AGENT_JSON [SUBMODULE_JSON]; manual security pass is not accepted",
+        )
         plan = load(sys.argv[2])
         validate_plan(plan)
         security = security_review(sys.argv[3], plan)
         path = Path(sys.argv[4]).resolve(strict=True)
         agent_review(path, plan)
-        record = {'plan': plan, 'security': security, 'agent': {'path': str(path), 'sha256': digest(path)}}
+        record = {
+            "plan": plan,
+            "security": security,
+            "agent": {"path": str(path), "sha256": digest(path)},
+        }
+        evidence = load(sys.argv[5]) if len(sys.argv) == 6 else {}
+        record["submodules"] = {
+            name: {
+                "repository": str(Path(item["repository"]).resolve(strict=True)),
+                "receipt_path": str(Path(item["receipt_path"]).resolve(strict=True)),
+                "receipt_sha256": digest(item["receipt_path"]),
+            }
+            for name, item in evidence.items()
+        }
+        submodule_reviews(plan, record["submodules"])
         folder = store()
         folder.mkdir(parents=True, exist_ok=True)
-        target = folder / (identity(plan) + '.json')
-        target.write_text(json.dumps(record, indent=2) + '\n')
-        print('Registered sealed scan and independent review:', target)
-    elif mode == 'push':
+        target = folder / (identity(plan) + ".json")
+        target.write_text(json.dumps(record, indent=2) + "\n")
+        print("Registered sealed scan and independent review:", target)
+    elif mode == "push":
+        ordinary_objects()
         url = safe_push_url(sys.argv[3])
+        push_destination(sys.argv[2], url)
         for line in sys.stdin:
             local_ref, head, ref, old = line.split()
-            require(set(head) != {'0'}, 'ref deletion is blocked')
-            require(ref.startswith('refs/heads/') and ref != 'refs/heads/main', 'only feature branches; main requires a PR')
-            key = identity({'url': url, 'ref': ref, 'remote_old': old, 'head': head})
-            record = load(store() / (key + '.json'))
-            require({k: record['plan'][k] for k in ('url', 'ref', 'remote_old', 'head')} == {'url': url, 'ref': ref, 'remote_old': old, 'head': head}, 'push plan mismatch')
+            require(set(head) != {"0"}, "ref deletion is blocked")
+            require(
+                ref.startswith("refs/heads/") and ref != "refs/heads/main",
+                "only feature branches; main requires a PR",
+            )
+            key = identity({"url": url, "ref": ref, "remote_old": old, "head": head})
+            record = load(store() / (key + ".json"))
+            require(
+                {k: record["plan"][k] for k in ("url", "ref", "remote_old", "head")}
+                == {"url": url, "ref": ref, "remote_old": old, "head": head},
+                "push plan mismatch",
+            )
             check_record(record)
-        print('pre-push: sealed Codex Security and independent review verified')
+        print("pre-push: sealed Codex Security and independent review verified")
+    elif mode == "verify-submodule":
+        require(len(sys.argv) == 5, "verify-submodule RECEIPT BASE HEAD")
+        record = load(sys.argv[2])
+        require(
+            record["plan"]["scan_base"] == sys.argv[3]
+            and record["plan"]["head"] == sys.argv[4],
+            "submodule review range mismatch",
+        )
+        check_record(record, delivered=True)
+        refs = git("ls-remote", record["plan"]["url"]).splitlines()
+        require(
+            any(
+                subprocess.run(
+                    [
+                        "git",
+                        "merge-base",
+                        "--is-ancestor",
+                        sys.argv[4],
+                        line.split()[0],
+                    ],
+                    capture_output=True,
+                ).returncode
+                == 0
+                for line in refs
+            ),
+            "submodule commit is not reachable from advertised remote refs",
+        )
     else:
-        raise ValueError('usage: review-gate prepare [REMOTE BRANCH] | record PLAN SCAN_DIR AGENT_JSON | push REMOTE URL')
+        raise ValueError(
+            "usage: review-gate prepare [REMOTE BRANCH] | record PLAN SCAN_DIR AGENT_JSON | push REMOTE URL"
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         main()
-    except (ValueError, OSError, KeyError, IndexError, TypeError, subprocess.CalledProcessError) as error:
-        message = 'Git or validator command failed' if isinstance(error, subprocess.CalledProcessError) else str(error)
-        print('BLOCKED: push gate:', message, file=sys.stderr)
+    except (
+        ValueError,
+        OSError,
+        KeyError,
+        IndexError,
+        TypeError,
+        subprocess.CalledProcessError,
+    ) as error:
+        message = (
+            "Git or validator command failed"
+            if isinstance(error, subprocess.CalledProcessError)
+            else str(error)
+        )
+        print("BLOCKED: push gate:", message, file=sys.stderr)
         sys.exit(1)

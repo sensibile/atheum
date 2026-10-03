@@ -42,3 +42,28 @@ Desktop codex-security 결과의 `target.remote`는 선택 필드다. 없으면 
 ## Push gate 회귀 검사
 
 `./scripts/test-push-boundary`는 플러그인 없이 임시 로컬 Git 저장소에서 계획·기준·URL·linked worktree 설치 경계를 검사하며 pre-commit에 연결된다. `./scripts/test-push-gate`는 설치된 Codex Security validator와 synthetic sealed fixture로 receipt/evidence 및 Git pre-push 프로토콜을 검사한다. 이는 제품 보안 리뷰가 아니며 실제 원격에는 push하지 않는다.
+
+## 추가 push 경계
+
+상대 로컬 push URL은 worktree마다 다른 목적지가 될 수 있어 거부한다. 절대 경로나 절대 `file://` URL을 사용한다. push 직전에도 현재 remote의 모든 push URL을 다시 열거하여 복수 목적지를 차단한다. Git replacement refs, custom replacement namespace 및 legacy grafts가 있으면 prepare/record/push 모두 거부한다. 검사와 전송이 같은 Git 객체를 다루도록 먼저 해당 설정을 제거하고 새 계획과 리뷰를 만든다.
+
+변경된 기존 gitlink마다 하위 저장소의 정확한 이전/이후 SHA에 대한 sealed 검사와 독립 리뷰 receipt가 필요하다. 하위 커밋을 먼저 push하고 다음 JSON을 `record`의 마지막 선택 인자로 전달한다:
+
+```json
+{
+  "akashic": {
+    "repository": "/absolute/child-repository",
+    "receipt_path": "/absolute/child-git-common-dir/push-reviews/identity.json"
+  }
+}
+```
+
+실제 변경된 경로만 넣는다. 상위 receipt는 하위 receipt의 해시를 보존하고 등록/push 때 하위 sealed 결과·agent 해시·범위 및 원격 ref에서 새 커밋의 도달 가능성을 재검사한다. 하위 receipt와 검사 파일을 보존한다. gitlink 삭제는 새 코드가 없으므로 하위 검사를 요구하지 않는다. 최초 gitlink 추가/일반 파일에서 gitlink 전환은 초기 보안 기준이 정의되지 않아 현재 gate가 차단한다. 하위 리뷰 없이 상위 coverage만으로 통과하지 않는다.
+
+테스트와 설정 검사에서 Python 최적화 모드를 사용하지 않는다. `PYTHONOPTIMIZE`/`python -O`로 assertion이 제거되는 실행은 fixture 생성 전 비영 종료한다.
+
+## PR 피드백 완료 확인
+
+push 성공은 PR 피드백 처리 완료가 아니다. 최신 head에서 봇 재리뷰 완료를 확인하고, 새 지적을 원문별로 검증한다. 타당한 지적은 수정·검사·새 push 범위 리뷰를 거쳐 올린다. 검증한 수정에는 근거 답글을 남긴 뒤 resolve한다. outdated 표시나 시간 경과만으로 resolve하지 않는다. 판단이 갈리거나 같은 지적이 반복되면 원문·재현·반증을 BOSS에게 제시한다.
+
+`./scripts/pr-review-status OWNER/REPO PR_NUMBER`는 최신 head와 Codex 봇 summary의 Code Review 완료, 모든 미해결 스레드, 현재 머지 상태를 읽는다. 최신 head의 봇 완료 기록이 없거나 진행 중이면 대기 상태다. 모두 충족한 관측에만 exit 0, 미완료는 3, API/파싱 오류는 비영 종료한다. 봇 summary 형식이 바뀌거나 요약이 없으면 완료를 추정하지 않는다. 이 도구는 반복 감시·답글·resolve·merge를 실행하지 않는다. 관측 후 새 push/리뷰가 생길 수 있으므로 머지 직전 다시 실행한다.

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Plugin-independent boundaries using isolated real Git repositories."""
+
 import json
 import os
 from pathlib import Path
@@ -7,19 +8,62 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from importlib.machinery import SourceFileLoader
+
+if sys.flags.optimize:
+    sys.exit("BLOCKED: tests require Python assertions; disable optimization")
 
 ROOT = Path(__file__).resolve().parents[1]
 count = 0
+status = SourceFileLoader(
+    "pr_status", str(ROOT / "scripts/pr-review-status")
+).load_module()
+head_fixture = "a" * 40
+summary_fixture = "<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | ✅ **Completed** | `aaaaaaa` | New commits |"
+for body, login, expected in (
+    (summary_fixture, "chatgpt-codex-connector[bot]", "completed"),
+    (
+        summary_fixture.replace("aaaaaaa", "bbbbbbb"),
+        "chatgpt-codex-connector[bot]",
+        "waiting",
+    ),
+    (
+        summary_fixture.replace("**Completed**", "**In progress**"),
+        "chatgpt-codex-connector[bot]",
+        "waiting",
+    ),
+    (summary_fixture, "some-contributor", "unknown"),
+    (summary_fixture.split("\n")[0], "chatgpt-codex-connector[bot]", "waiting"),
+):
+    actual = status.completed_review(
+        [
+            {
+                "id": 1,
+                "updated_at": "2026-10-03T00:00:00Z",
+                "user": {"login": login},
+                "body": body,
+            }
+        ],
+        head_fixture,
+    )
+    if actual["state"] != expected:
+        raise AssertionError((expected, actual))
+    count += 1
 with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     temp = Path(directory).resolve()
     repo = temp / "repo"
     repo.mkdir()
     env = os.environ.copy()
     # Git invokes hooks with repository variables; do not leak them into fixtures.
-    for key in subprocess.check_output(["git", "rev-parse", "--local-env-vars"], text=True).splitlines():
+    for key in subprocess.check_output(
+        ["git", "rev-parse", "--local-env-vars"], text=True
+    ).splitlines():
         env.pop(key, None)
-    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
-               CODEX_SECURITY_PLUGIN_DIR=str(temp / "missing-plugin"))
+    env.update(
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        CODEX_SECURITY_PLUGIN_DIR=str(temp / "missing-plugin"),
+    )
 
     def run(args, success=True, cwd=repo):
         global count
@@ -58,14 +102,43 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     remote2 = temp / "mirror.git"
     run(["git", "init", "--bare", str(remote2)])
     run(["git", "config", "--add", "remote.origin.pushurl", url])
-    run(["git", "config", "--add", "remote.origin.pushurl", "file://localhost" + str(remote2)])
+    run(
+        [
+            "git",
+            "config",
+            "--add",
+            "remote.origin.pushurl",
+            "file://localhost" + str(remote2),
+        ]
+    )
     assert "one push URL required" in run(prepare, False)[1]
     assert planpath.read_bytes() == saved
     assert run(["git", "ls-remote", str(remote2)])[0] == ""
     run(["git", "config", "--unset-all", "remote.origin.pushurl"])
+    # Relative destinations can resolve differently in linked worktrees.
+    run(["git", "config", "remote.origin.pushurl", "../remote.git"])
+    assert "relative local push URL" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    run(["git", "config", "--unset", "remote.origin.pushurl"])
+    # Replacement refs and legacy grafts must fail before any evidence is saved.
+    run(["git", "replace", baseline, head])
+    assert "replacement objects" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    run(["git", "replace", "-d", baseline])
+    grafts = repo / ".git/info/grafts"
+    grafts.write_text(head + "\n")
+    assert "grafts are forbidden" in run(prepare, False)[1]
+    grafts.unlink()
     # Synthetic credential: reject before contacting a server or saving it.
     credential = "fixture-credential-do-not-use"
-    run(["git", "config", "remote.origin.pushurl", "https://user:" + credential + "@example.invalid/repo.git"])
+    run(
+        [
+            "git",
+            "config",
+            "remote.origin.pushurl",
+            "https://user:" + credential + "@example.invalid/repo.git",
+        ]
+    )
     output, error = run(prepare, False)
     assert "credentials are forbidden" in error
     assert credential not in output + error
@@ -76,7 +149,13 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     forged = {**plan, "remote_main": head, "scan_base": head}
     forgedpath = temp / "forged.json"
     forgedpath.write_text(json.dumps(forged))
-    args = ["./scripts/review-gate", "record", str(forgedpath), str(temp / "no-scan"), str(temp / "no-agent")]
+    args = [
+        "./scripts/review-gate",
+        "record",
+        str(forgedpath),
+        str(temp / "no-scan"),
+        str(temp / "no-agent"),
+    ]
     assert "baseline changed or forged" in run(args, False)[1]
     # Changing the actual remote baseline also invalidates an otherwise real plan.
     run(["git", "--git-dir", str(remote), "fetch", str(repo), "feature"])
@@ -100,10 +179,30 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["git", "config", "core.hooksPath", ".githooks"])
     run(["./scripts/install-hooks"])
     hooks = Path(run(["git", "config", "core.hooksPath"])[0])
+    # Re-enumerate push URLs before any destination is updated.
+    run(["git", "config", "--add", "remote.origin.pushurl", url])
+    run(
+        [
+            "git",
+            "config",
+            "--add",
+            "remote.origin.pushurl",
+            "file://localhost" + str(remote2),
+        ]
+    )
+    assert (
+        "one push URL required at push time"
+        in run(["git", "push", "origin", "feature"], False)[1]
+    )
+    assert run(["git", "ls-remote", str(remote), "refs/heads/feature"])[0] == ""
+    assert run(["git", "ls-remote", str(remote2)])[0] == ""
+    run(["git", "config", "--unset-all", "remote.origin.pushurl"])
     assert hooks.is_absolute() and (hooks / "pre-push").is_file()
     assert not (old_tree / ".githooks").exists()
     # Actual Git pre-push from an older worktree must not bypass the gate.
-    output, error = run(["git", "push", "--dry-run", "origin", "old-feature"], False, old_tree)
+    output, error = run(
+        ["git", "push", "--dry-run", "origin", "old-feature"], False, old_tree
+    )
     assert "BLOCKED: push gate" in error
     assert run(["git", "ls-remote", "origin", "refs/heads/old-feature"])[0] == ""
     run([str(hooks / "pre-commit")], False, old_tree)
@@ -113,4 +212,8 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["git", "config", "extensions.worktreeConfig", "true"])
     run(["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=old_tree)
     assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
-print("PASS:", count, "plugin-independent Git boundary checks; isolated local remotes only")
+print(
+    "PASS:",
+    count,
+    "plugin-independent Git boundary checks; isolated local remotes only",
+)

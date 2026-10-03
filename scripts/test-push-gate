@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Synthetic integration tests. These fixtures are NOT product security reviews."""
+
 import copy
 import importlib.util
 import json
@@ -10,135 +11,328 @@ import subprocess
 import sys
 import tempfile
 
+if sys.flags.optimize:
+    sys.exit("BLOCKED: tests require Python assertions; disable optimization")
+
 sys.dont_write_bytecode = True
 root = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('gate', root / 'scripts/review-gate')
+spec = importlib.util.spec_from_file_location("gate", root / "scripts/review-gate")
 # Extensionless executable needs an explicit source loader.
 from importlib.machinery import SourceFileLoader
-spec = importlib.util.spec_from_loader('gate', SourceFileLoader('gate', str(root / 'scripts/review-gate')))
+
+spec = importlib.util.spec_from_loader(
+    "gate", SourceFileLoader("gate", str(root / "scripts/review-gate"))
+)
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 plugin = gate.plugin().parent.parent
-example = plugin / 'examples/completed-scan'
+example = plugin / "examples/completed-scan"
 count = 0
-with tempfile.TemporaryDirectory(prefix='push-gate-test-') as tmp:
+with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     temp = Path(tmp).resolve()
-    repo = temp / 'repo'
+    repo = temp / "repo"
     repo.mkdir()
     env = os.environ.copy()
-    for key in subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).splitlines():
+    for key in subprocess.check_output(
+        ["git", "rev-parse", "--local-env-vars"], text=True
+    ).splitlines():
         env.pop(key, None)
-    env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
-    def run(args, success=True, stdin=None):
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+
+    def run(args, success=True, stdin=None, cwd=repo):
         global count
-        result = subprocess.run(args, cwd=repo, env=env, text=True, input=stdin, capture_output=True)
+        result = subprocess.run(
+            args, cwd=cwd, env=env, text=True, input=stdin, capture_output=True
+        )
         assert (result.returncode == 0) == success, (args, result.stdout, result.stderr)
         count += 1
         return result.stdout.strip()
-    run(['git', 'init', '-b', 'main'])
-    run(['git', 'config', 'user.name', 'Synthetic Test'])
-    run(['git', 'config', 'user.email', 'test@example.invalid'])
-    (repo / 'scripts').mkdir()
-    shutil.copy2(root / 'scripts/review-gate', repo / 'scripts/review-gate')
-    shutil.copy2(root / 'scripts/prepare-push', repo / 'scripts/prepare-push')
-    (repo / '.githooks').mkdir()
-    shutil.copy2(root / '.githooks/pre-push', repo / '.githooks/pre-push')
-    run(['git', 'add', '.'])
-    run(['git', 'commit', '-m', 'test: baseline'])
-    baseline = run(['git', 'rev-parse', 'HEAD'])
-    remote = temp / 'remote.git'
-    run(['git', 'init', '--bare', str(remote)])
-    remote_url = 'file://localhost' + str(remote)
-    run(['git', 'remote', 'add', 'origin', remote_url])
-    run(['git', 'push', 'origin', 'main'])
-    run(['git', 'checkout', '-b', 'feature'])
-    (repo / 'file').write_text('feature\n')
-    run(['git', 'add', '.']); run(['git', 'commit', '-m', 'test: feature'])
-    head = run(['git', 'rev-parse', 'HEAD'])
-    run(['git', 'config', 'core.hooksPath', '.githooks'])
-    run(['git', 'config', 'codex.securityPluginDir', str(plugin)])
-    run(['./scripts/prepare-push', 'origin', 'feature'])
-    folder = Path(run(['git', 'rev-parse', '--git-common-dir'])) / 'push-reviews'
-    planpath = next((repo / folder / 'plans').glob('*.json'))
+
+    run(["git", "init", "-b", "main"])
+    run(["git", "config", "user.name", "Synthetic Test"])
+    run(["git", "config", "user.email", "test@example.invalid"])
+    (repo / "scripts").mkdir()
+    shutil.copy2(root / "scripts/review-gate", repo / "scripts/review-gate")
+    shutil.copy2(root / "scripts/prepare-push", repo / "scripts/prepare-push")
+    (repo / ".githooks").mkdir()
+    shutil.copy2(root / ".githooks/pre-push", repo / ".githooks/pre-push")
+    run(["git", "add", "."])
+    run(["git", "commit", "-m", "test: baseline"])
+    baseline = run(["git", "rev-parse", "HEAD"])
+    remote = temp / "remote.git"
+    run(["git", "init", "--bare", str(remote)])
+    remote_url = "file://localhost" + str(remote)
+    run(["git", "remote", "add", "origin", remote_url])
+    run(["git", "push", "origin", "main"])
+    run(["git", "checkout", "-b", "feature"])
+    (repo / "file").write_text("feature\n")
+    run(["git", "add", "."])
+    run(["git", "commit", "-m", "test: feature"])
+    head = run(["git", "rev-parse", "HEAD"])
+    run(["git", "config", "core.hooksPath", ".githooks"])
+    run(["git", "config", "codex.securityPluginDir", str(plugin)])
+    run(["./scripts/prepare-push", "origin", "feature"])
+    folder = Path(run(["git", "rev-parse", "--git-common-dir"])) / "push-reviews"
+    planpath = next((repo / folder / "plans").glob("*.json"))
     plan = json.loads(planpath.read_text())
-    assert plan['scan_base'] == baseline and plan['remote_old'] == '0' * len(head)
-    run(['git', 'push', 'origin', 'feature'], False)
-    agent = temp / 'agent.json'
-    agentdata = {'kind':'agent', 'verdict':'pass', 'independent':True, 'reviewed_base':baseline, 'reviewed_head':head, 'reviewer':'synthetic fixture', 'summary':'Not an actual review', 'blocking_findings':[]}
+    assert plan["scan_base"] == baseline and plan["remote_old"] == "0" * len(head)
+    run(["git", "push", "origin", "feature"], False)
+    agent = temp / "agent.json"
+    agentdata = {
+        "kind": "agent",
+        "verdict": "pass",
+        "independent": True,
+        "reviewed_base": baseline,
+        "reviewed_head": head,
+        "reviewer": "synthetic fixture",
+        "summary": "Not an actual review",
+        "blocking_findings": [],
+    }
     agent.write_text(json.dumps(agentdata))
-    scan = temp / 'scan'; scan.mkdir()
-    manifest = json.loads((example / 'scan-manifest.json').read_text())
-    coverage = json.loads((example / 'coverage.json').read_text())
-    findings = json.loads((example / 'findings.json').read_text())
-    manifest['scan']['target'] = {'kind':'git_diff', 'targetId':'synthetic-test', 'displayName':'fixture', 'remote':remote_url, 'baseRevision':baseline, 'headRevision':head, 'snapshotDigest':'codex-security-snapshot/v1:sha256:' + 'a'*64}
-    manifest['scan'].pop('sealedAt'); manifest['scan'].pop('artifacts')
-    coverage['mode'] = 'diff'; coverage['inventoryStrategy'] = 'diff'
-    coverage['surfaces'][0]['disposition'] = 'no_issue_found'
-    findings['findings'] = []
+    scan = temp / "scan"
+    scan.mkdir()
+    manifest = json.loads((example / "scan-manifest.json").read_text())
+    coverage = json.loads((example / "coverage.json").read_text())
+    findings = json.loads((example / "findings.json").read_text())
+    manifest["scan"]["target"] = {
+        "kind": "git_diff",
+        "targetId": "synthetic-test",
+        "displayName": "fixture",
+        "remote": remote_url,
+        "baseRevision": baseline,
+        "headRevision": head,
+        "snapshotDigest": "codex-security-snapshot/v1:sha256:" + "a" * 64,
+    }
+    manifest["scan"].pop("sealedAt")
+    manifest["scan"].pop("artifacts")
+    coverage["mode"] = "diff"
+    coverage["inventoryStrategy"] = "diff"
+    coverage["surfaces"][0]["disposition"] = "no_issue_found"
+    findings["findings"] = []
+
     def seal(m=manifest, c=coverage, f=findings):
-        for name, value in [('scan-manifest.json',m),('coverage.json',c),('findings.json',f)]:
+        for name, value in [
+            ("scan-manifest.json", m),
+            ("coverage.json", c),
+            ("findings.json", f),
+        ]:
             (scan / name).write_text(json.dumps(value))
-        run([sys.executable, str(plugin / 'scripts/finalize_scan_contract.py'), '--scan-dir', str(scan)])
-    record = ['./scripts/review-gate', 'record', str(planpath), str(scan), str(agent)]
+        run(
+            [
+                sys.executable,
+                str(plugin / "scripts/finalize_scan_contract.py"),
+                "--scan-dir",
+                str(scan),
+            ]
+        )
+
+    record = ["./scripts/review-gate", "record", str(planpath), str(scan), str(agent)]
     seal()
     run(record)
     # A forged baseline must fail registration and actual pre-push, even with
     # otherwise valid sealed scan and independent-review artifacts.
     original_plan = planpath.read_text()
-    planpath.write_text(json.dumps({**plan, 'remote_main': head, 'scan_base': head}))
+    planpath.write_text(json.dumps({**plan, "remote_main": head, "scan_base": head}))
     run(record, False)
     planpath.write_text(original_plan)
-    receiptpath = repo / folder / (gate.identity(plan) + '.json')
+    receiptpath = repo / folder / (gate.identity(plan) + ".json")
     original_receipt = receiptpath.read_text()
     receipt = json.loads(original_receipt)
-    receipt['plan'].update(remote_main=head, scan_base=head)
+    receipt["plan"].update(remote_main=head, scan_base=head)
     receiptpath.write_text(json.dumps(receipt))
-    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
     receiptpath.write_text(original_receipt)
     # A real baseline change after registration invalidates the receipt.
-    run(['git', '--git-dir', str(remote), 'fetch', str(repo), 'feature'])
-    run(['git', '--git-dir', str(remote), 'update-ref', 'refs/heads/main', head])
-    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
-    run(['git', '--git-dir', str(remote), 'update-ref', 'refs/heads/main', baseline])
+    run(["git", "--git-dir", str(remote), "fetch", str(repo), "feature"])
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head])
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
     # Desktop producer's actual contract omits the optional remote field.
     without_remote = copy.deepcopy(manifest)
-    without_remote['scan']['target'].pop('remote')
-    seal(without_remote); run(record)
-    run(['git', 'push', '--dry-run', 'origin', 'feature'])
+    without_remote["scan"]["target"].pop("remote")
+    seal(without_remote)
+    run(record)
+    run(["git", "push", "--dry-run", "origin", "feature"])
+    # Even a valid receipt cannot authorize the first of multiple destinations.
+    mirror = temp / "mirror.git"
+    run(["git", "init", "--bare", str(mirror)])
+    run(["git", "config", "--add", "remote.origin.pushurl", remote_url])
+    run(
+        [
+            "git",
+            "config",
+            "--add",
+            "remote.origin.pushurl",
+            "file://localhost" + str(mirror),
+        ]
+    )
+    run(["git", "push", "origin", "feature"], False)
+    assert not run(["git", "ls-remote", remote_url, "refs/heads/feature"])
+    assert not run(["git", "ls-remote", str(mirror)])
+    run(["git", "config", "--unset-all", "remote.origin.pushurl"])
+    run(["git", "replace", baseline, head])
+    run(record, False)
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
+    run(["git", "replace", "-d", baseline])
     other_repo = copy.deepcopy(manifest)
-    other_repo['scan']['target']['remote'] = 'https://example.invalid/other.git'
-    seal(other_repo); run(record, False)
-    assert gate.repository_location('git@github.com:sensibile/axiom.git') == gate.repository_location('https://github.com/sensibile/axiom.git')
-    seal(); run(record)
-    # Full git push exercises the actual Git hook stdin protocol.
-    run(['git', 'push', '--dry-run', 'origin', 'feature'])
-    bad = copy.deepcopy(manifest); bad['scan']['target']['headRevision'] = baseline
-    seal(bad); run(record, False)
-    bad = copy.deepcopy(coverage); bad['completeness'] = 'partial'
-    seal(c=bad); run(record, False)
+    other_repo["scan"]["target"]["remote"] = "https://example.invalid/other.git"
+    seal(other_repo)
+    run(record, False)
+    assert gate.repository_location(
+        "git@github.com:sensibile/axiom.git"
+    ) == gate.repository_location("https://github.com/sensibile/axiom.git")
     seal()
-    bad = json.loads((scan / 'scan-manifest.json').read_text()); bad['scan']['status'] = 'failed'
-    (scan / 'scan-manifest.json').write_text(json.dumps(bad)); run(record, False)
+    run(record)
+    # Full git push exercises the actual Git hook stdin protocol.
+    run(["git", "push", "--dry-run", "origin", "feature"])
+    bad = copy.deepcopy(manifest)
+    bad["scan"]["target"]["headRevision"] = baseline
+    seal(bad)
+    run(record, False)
+    bad = copy.deepcopy(coverage)
+    bad["completeness"] = "partial"
+    seal(c=bad)
+    run(record, False)
+    seal()
+    bad = json.loads((scan / "scan-manifest.json").read_text())
+    bad["scan"]["status"] = "failed"
+    (scan / "scan-manifest.json").write_text(json.dumps(bad))
+    run(record, False)
     # Official sealed fixture with a finding: validator succeeds but gate blocks.
-    original = json.loads((example / 'findings.json').read_text())
-    badcov = copy.deepcopy(coverage); badcov['surfaces'][0]['disposition'] = 'reported'
-    seal(c=badcov, f=original); run(record, False)
-    seal(); run(record)
-    (scan / 'coverage.json').write_text('{}')
-    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
-    seal(); run(record)
-    agent.write_text(json.dumps({**agentdata, 'summary':'changed'}))
-    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
-    agent.write_text(json.dumps(agentdata)); run(record)
-    run(['git', 'push', '--dry-run', 'origin', 'feature'])
+    original = json.loads((example / "findings.json").read_text())
+    badcov = copy.deepcopy(coverage)
+    badcov["surfaces"][0]["disposition"] = "reported"
+    seal(c=badcov, f=original)
+    run(record, False)
+    seal()
+    run(record)
+    (scan / "coverage.json").write_text("{}")
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
+    seal()
+    run(record)
+    agent.write_text(json.dumps({**agentdata, "summary": "changed"}))
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
+    agent.write_text(json.dumps(agentdata))
+    run(record)
+    run(["git", "push", "--dry-run", "origin", "feature"])
     # New commit makes the old receipt stale.
-    (repo / 'file').write_text('changed\n'); run(['git','add','.']); run(['git','commit','-m','test: changed'])
-    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
-    run(['./scripts/review-gate','record','url','ref','old','head','security.json','agent.json'],False)
+    (repo / "file").write_text("changed\n")
+    run(["git", "add", "."])
+    run(["git", "commit", "-m", "test: changed"])
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
+    run(
+        [
+            "./scripts/review-gate",
+            "record",
+            "url",
+            "ref",
+            "old",
+            "head",
+            "security.json",
+            "agent.json",
+        ],
+        False,
+    )
     # main and deletion are rejected directly even without a matching receipt.
-    zero = '0' * len(head)
-    args = ['./.githooks/pre-push', 'origin', remote_url]
-    run(args, False, f'refs/heads/feature {head} refs/heads/main {baseline}\n')
-    run(args, False, f'(delete) {zero} refs/heads/feature {head}\n')
-    run(args, False, f'refs/heads/feature {head} refs/tags/v1 {zero}\n')
-print('PASS:', count, 'synthetic integration assertions; no hosted review or real remote push')
+    zero = "0" * len(head)
+    args = ["./.githooks/pre-push", "origin", remote_url]
+    run(args, False, f"refs/heads/feature {head} refs/heads/main {baseline}\n")
+    run(args, False, f"(delete) {zero} refs/heads/feature {head}\n")
+    run(args, False, f"refs/heads/feature {head} refs/tags/v1 {zero}\n")
+    # Parent gitlink review cannot substitute for child code review. Publish the
+    # already-reviewed child commit, then validate its retained receipt.
+    parent = temp / "parent"
+    parent.mkdir()
+    run(["git", "init", "-b", "main"], cwd=parent)
+    run(["git", "config", "user.name", "Synthetic Test"], cwd=parent)
+    run(["git", "config", "user.email", "test@example.invalid"], cwd=parent)
+    run(
+        [
+            "git",
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "160000," + baseline + ",child",
+        ],
+        cwd=parent,
+    )
+    run(["git", "commit", "-m", "test: parent baseline"], cwd=parent)
+    parent_base = run(["git", "rev-parse", "HEAD"], cwd=parent)
+    parent_remote = temp / "parent.git"
+    run(["git", "init", "--bare", str(parent_remote)], cwd=parent)
+    parent_url = "file://localhost" + str(parent_remote)
+    run(["git", "remote", "add", "origin", parent_url], cwd=parent)
+    run(["git", "push", "origin", "main"], cwd=parent)
+    run(["git", "checkout", "-b", "feature"], cwd=parent)
+    run(["git", "update-index", "--cacheinfo", "160000," + head + ",child"], cwd=parent)
+    run(["git", "commit", "-m", "test: child update"], cwd=parent)
+    parent_head = run(["git", "rev-parse", "HEAD"], cwd=parent)
+    parent_plan = {
+        **plan,
+        "url": parent_url,
+        "head": parent_head,
+        "scan_base": parent_base,
+        "remote_main": parent_base,
+    }
+    parent_planpath = temp / "parent-plan.json"
+    parent_planpath.write_text(json.dumps(parent_plan))
+    parent_manifest = copy.deepcopy(manifest)
+    parent_manifest["scan"]["target"].update(
+        remote=parent_url, baseRevision=parent_base, headRevision=parent_head
+    )
+    seal(parent_manifest)
+    parent_agent = temp / "parent-agent.json"
+    parent_agent.write_text(
+        json.dumps(
+            {**agentdata, "reviewed_base": parent_base, "reviewed_head": parent_head}
+        )
+    )
+    # Use a distinct scan directory; child evidence must remain unchanged.
+    parent_scan = temp / "parent-scan"
+    shutil.copytree(scan, parent_scan)
+    seal()
+    run(record)
+    run(["git", "push", "origin", head + ":refs/heads/feature"])
+    parent_record = [
+        str(root / "scripts/review-gate"),
+        "record",
+        str(parent_planpath),
+        str(parent_scan),
+        str(parent_agent),
+    ]
+    run(parent_record, False, cwd=parent)
+    child_evidence = temp / "child-evidence.json"
+    child_evidence.write_text(
+        json.dumps(
+            {"child": {"repository": str(repo), "receipt_path": str(receiptpath)}}
+        )
+    )
+    run(parent_record + [str(child_evidence)], cwd=parent)
+    parent_receipt = (
+        parent / ".git/push-reviews" / (gate.identity(parent_plan) + ".json")
+    )
+    verify_parent = [
+        str(root / "scripts/review-gate"),
+        "verify-submodule",
+        str(parent_receipt),
+        parent_base,
+        parent_head,
+    ]
+    # Parent itself is not published, even though all code evidence exists.
+    run(verify_parent, False, cwd=parent)
+    # Child evidence tampering is caught again at parent push time.
+    shutil.copytree(root / ".githooks", parent / ".githooks")
+    (parent / "scripts").mkdir()
+    shutil.copy2(root / "scripts/review-gate", parent / "scripts/review-gate")
+    run(["git", "config", "core.hooksPath", ".githooks"], cwd=parent)
+    run(["git", "push", "--dry-run", "origin", "feature"], cwd=parent)
+    child_receipt_bytes = receiptpath.read_bytes()
+    receiptpath.write_text("{}")
+    run(["git", "push", "--dry-run", "origin", "feature"], False, cwd=parent)
+    receiptpath.write_bytes(child_receipt_bytes)
+    run(["git", "push", "--dry-run", "origin", "feature"], cwd=parent)
+print(
+    "PASS:",
+    count,
+    "synthetic integration assertions; no hosted review or real remote push",
+)

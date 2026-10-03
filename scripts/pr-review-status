@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Read-only PR completion check. Does not post, resolve, merge or poll."""
+
+import json
+import re
+import subprocess
+import sys
+
+
+def gh(*args):
+    return json.loads(subprocess.check_output(["gh", *args], text=True))
+
+
+def completed_review(comments, head):
+    summaries = [
+        c
+        for c in comments
+        if c["user"]["login"] == "chatgpt-codex-connector[bot]"
+        and "<!-- codex-pull-request-review-summary -->" in c["body"]
+    ]
+    if not summaries:
+        return {"state": "unknown", "reason": "Bot review completion summary absent"}
+    summary = max(summaries, key=lambda c: c["updated_at"])
+    rows = []
+    for line in summary["body"].splitlines():
+        cells = [cell.strip() for cell in line.strip().split("|")]
+        if len(cells) >= 5 and re.search(r"\*\*(?:Code|Security) Review\*\*", cells[1]):
+            match = re.search(r"`([0-9a-f]{7,64})`", cells[3])
+            rows.append(
+                {
+                    "code": "**Code Review**" in cells[1],
+                    "head_matches": bool(match and head.startswith(match.group(1))),
+                    "completed": "**Completed**" in cells[2],
+                }
+            )
+    code = [r for r in rows if r["code"]]
+    done = bool(code) and all(r["head_matches"] and r["completed"] for r in code)
+    done = done and all(r["completed"] for r in rows)
+    return {
+        "state": "completed" if done else "waiting",
+        "summary_id": summary["id"],
+        "updated_at": summary["updated_at"],
+        "rows": rows,
+    }
+
+
+def main():
+    if (
+        len(sys.argv) != 3
+        or not re.fullmatch(r"[^/\s]+/[^/\s]+", sys.argv[1])
+        or not sys.argv[2].isdigit()
+    ):
+        sys.exit("usage: scripts/pr-review-status OWNER/REPO PR_NUMBER")
+    repo, number = sys.argv[1:]
+    owner, name = repo.split("/")
+    pr = gh(
+        "pr",
+        "view",
+        number,
+        "--repo",
+        repo,
+        "--json",
+        "headRefOid,mergeStateStatus,mergeable,state,isDraft,url",
+    )
+    pages = gh("api", f"repos/{repo}/issues/{number}/comments", "--paginate", "--slurp")
+    comments = [comment for page in pages for comment in page]
+    query = """query($owner:String!,$name:String!,$number:Int!,$cursor:String){
+      repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid
+        reviewThreads(first:100,after:$cursor){nodes{id isResolved}
+          pageInfo{hasNextPage endCursor}}}}}"""
+    unresolved = []
+    cursor = None
+    while True:
+        args = [
+            "api",
+            "graphql",
+            "-f",
+            "query=" + query,
+            "-f",
+            "owner=" + owner,
+            "-f",
+            "name=" + name,
+            "-F",
+            "number=" + number,
+        ]
+        if cursor:
+            args += ["-f", "cursor=" + cursor]
+        data = gh(*args)["data"]["repository"]["pullRequest"]
+        if data["headRefOid"] != pr["headRefOid"]:
+            sys.exit("BLOCKED: PR head changed during observation; recheck")
+        threads = data["reviewThreads"]
+        unresolved += [t["id"] for t in threads["nodes"] if not t["isResolved"]]
+        if not threads["pageInfo"]["hasNextPage"]:
+            break
+        cursor = threads["pageInfo"]["endCursor"]
+    bot = completed_review(comments, pr["headRefOid"])
+    ready = (
+        bot["state"] == "completed"
+        and not unresolved
+        and pr["state"] == "OPEN"
+        and not pr["isDraft"]
+        and pr["mergeStateStatus"] == "CLEAN"
+        and pr["mergeable"] == "MERGEABLE"
+    )
+    print(
+        json.dumps(
+            {
+                **pr,
+                "bot_review": bot,
+                "unresolved_threads": unresolved,
+                "ready_at_observation": ready,
+            },
+            indent=2,
+        )
+    )
+    return 0 if ready else 3
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (
+        subprocess.CalledProcessError,
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+    ) as error:
+        sys.exit("BLOCKED: PR observation failed: " + type(error).__name__)
