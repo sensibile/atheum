@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+# Keep checkout path newlines; remove only Git's output delimiter.
+checkout=$(git rev-parse --show-toplevel && printf .)
+checkout=${checkout%.}
+cd "${checkout%?}"
+exec ./scripts/review-gate prepare "$@"

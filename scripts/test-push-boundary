@@ -1,0 +1,642 @@
+#!/usr/bin/env python3
+"""Plugin-independent boundaries using isolated real Git repositories."""
+
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+from importlib.machinery import SourceFileLoader
+
+if sys.flags.optimize:
+    sys.exit("BLOCKED: tests require Python assertions; disable optimization")
+
+sys.dont_write_bytecode = True
+
+ROOT = Path(__file__).resolve().parents[1]
+count = 0
+status = SourceFileLoader(
+    "pr_status", str(ROOT / "scripts/pr-review-status")
+).load_module()
+head_fixture = "a" * 40
+summary_fixture = "<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | ✅ **Completed** | `aaaaaaa` | New commits |"
+for body, login, expected in (
+    (summary_fixture, "chatgpt-codex-connector[bot]", "completed"),
+    (
+        summary_fixture.replace("aaaaaaa", "bbbbbbb"),
+        "chatgpt-codex-connector[bot]",
+        "waiting",
+    ),
+    (
+        summary_fixture.replace("**Completed**", "**In progress**"),
+        "chatgpt-codex-connector[bot]",
+        "waiting",
+    ),
+    (summary_fixture, "some-contributor", "unknown"),
+    (summary_fixture.split("\n")[0], "chatgpt-codex-connector[bot]", "waiting"),
+):
+    actual = status.completed_review(
+        [
+            {
+                "id": 1,
+                "updated_at": "2026-10-03T00:00:00Z",
+                "user": {"login": login},
+                "body": body,
+            }
+        ],
+        head_fixture,
+        {"aaaaaaa": head_fixture},
+    )
+    if actual["state"] != expected:
+        raise AssertionError((expected, actual))
+    count += 1
+for security_sha, resolved, expected in (
+    ("b" * 40, {}, "waiting"),
+    (head_fixture, {}, "completed"),
+    ("aaaaaaa", {"aaaaaaa": head_fixture}, "completed"),
+    ("bbbbbbb", {"bbbbbbb": "b" * 40}, "waiting"),
+):
+    body = (
+        summary_fixture.replace("`aaaaaaa`", "`" + head_fixture + "`")
+        + "\n| 🛡 **Security Review** | ✅ **Completed** | `"
+        + security_sha
+        + "` | Security |"
+    )
+    actual = status.completed_review(
+        [
+            {
+                "id": 2,
+                "updated_at": "2026-10-03T01:00:00Z",
+                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "body": body,
+            }
+        ],
+        head_fixture,
+        resolved,
+    )
+    assert actual["state"] == expected, (actual, expected)
+    count += 1
+with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
+    temp = Path(directory).resolve()
+    repo = temp / "repo\n"
+    repo.mkdir()
+    env = os.environ.copy()
+    # Git invokes hooks with repository variables; do not leak them into fixtures.
+    for key in subprocess.check_output(
+        ["git", "rev-parse", "--local-env-vars"], text=True
+    ).splitlines():
+        env.pop(key, None)
+    env.update(
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        CODEX_SECURITY_PLUGIN_DIR=str(temp / "missing-plugin"),
+    )
+
+    def run(args, success=True, cwd=repo):
+        global count
+        result = subprocess.run(args, cwd=cwd, env=env, text=True, capture_output=True)
+        assert (result.returncode == 0) == success, (args, result.stdout, result.stderr)
+        count += 1
+        return result.stdout.strip(), result.stderr
+
+    run(["git", "init", "-b", "main"])
+    run(["git", "config", "user.name", "Boundary Test"])
+    run(["git", "config", "user.email", "test@example.invalid"])
+    run(["git", "commit", "--allow-empty", "-m", "test: old baseline"])
+    baseline = run(["git", "rev-parse", "HEAD"])[0]
+    remote = temp / "remote.git"
+    run(["git", "init", "--bare", str(remote)])
+    url = "file://localhost" + str(remote)
+    run(["git", "remote", "add", "origin", url])
+    run(["git", "push", "origin", "main"])
+    old_tree = temp / "old worktree"
+    run(["git", "worktree", "add", "-b", "old-feature", str(old_tree), baseline])
+    run(["git", "checkout", "-b", "feature"])
+    (repo / "scripts").mkdir()
+    for name in ("review-gate", "prepare-push", "install-hooks"):
+        shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
+    run(["git", "add", "."])
+    run(["git", "commit", "-m", "test: feature"])
+    head = run(["git", "rev-parse", "HEAD"])[0]
+    prepare = ["./scripts/prepare-push", "origin", "feature"]
+    run(prepare)
+    run(["git", "config", "remote.origin.receivepack", "fixture-custom-receive"])
+    assert "custom receive-pack" in run(prepare, False)[1]
+    run(["git", "config", "--unset", "remote.origin.receivepack"])
+    # Harmless installed helper proves Git's execution path, then the gate must
+    # reject repository/remote URL selection before that helper can run.
+    helper_bin = temp / "helper-bin"
+    helper_bin.mkdir()
+    marker = helper_bin / "invoked"
+    helper = helper_bin / "git-remote-boundaryprobe"
+    helper.write_text(
+        '#!/usr/bin/env python3\nfrom pathlib import Path\nimport sys\nPath(__file__).with_name("invoked").write_text("invoked")\nsys.exit(1)\n'
+    )
+    helper.chmod(0o755)
+    saved_path = env["PATH"]
+    env["PATH"] = str(helper_bin) + os.pathsep + saved_path
+    run(["git", "config", "protocol.boundaryprobe.allow", "always"])
+    run(["git", "ls-remote", "boundaryprobe::payload"], False)
+    assert marker.read_text() == "invoked"
+    for unsafe in ("boundaryprobe::payload", "boundaryprobe://host/repo"):
+        marker.unlink(missing_ok=True)
+        run(["git", "remote", "set-url", "origin", unsafe])
+        run(prepare, False)
+        assert not marker.exists()
+    run(["git", "remote", "set-url", "origin", url])
+    option_helper = helper_bin / "boundary-option:x"
+    shutil.copy2(helper, option_helper)
+    marker.unlink(missing_ok=True)
+    run(["git", "ls-remote", "--upload-pack=boundary-option:x", url], False)
+    assert marker.read_text() == "invoked"
+    marker.unlink()
+    run(["git", "config", "remote.origin.url", "--upload-pack=boundary-option:x"])
+    assert "option-like repository URL" in run(prepare, False)[1]
+    assert not marker.exists()
+    run(["git", "config", "remote.origin.url", url])
+    env["PATH"] = saved_path
+    planpath = next((repo / ".git/push-reviews/plans").glob("*.json"))
+    plan = json.loads(planpath.read_text())
+    assert plan["scan_base"] == baseline and plan["remote_main"] == baseline
+    assert plan["head"] == head
+    saved = planpath.read_bytes()
+    # Another clone advances main to an object absent from this checkout.
+    publisher = temp / "main-publisher"
+    run(["git", "clone", "--branch", "main", url, str(publisher)])
+    run(["git", "config", "user.name", "Boundary Publisher"], cwd=publisher)
+    run(["git", "config", "user.email", "test@example.invalid"], cwd=publisher)
+    run(
+        ["git", "commit", "--allow-empty", "-m", "test: remote main advance"],
+        cwd=publisher,
+    )
+    main_tip = run(["git", "rev-parse", "HEAD"], cwd=publisher)[0]
+    run(["git", "push", "origin", "main"], cwd=publisher)
+    run(["git", "cat-file", "-e", main_tip + "^{commit}"], False)
+    fetch_head = repo / ".git/FETCH_HEAD"
+    fetch_before = fetch_head.read_bytes() if fetch_head.exists() else None
+    run(prepare)
+    advanced = json.loads(planpath.read_text())
+    assert advanced["remote_main"] == main_tip and advanced["scan_base"] == baseline
+    assert run(["git", "rev-parse", "HEAD"])[0] == head
+    assert (fetch_head.read_bytes() if fetch_head.exists() else None) == fetch_before
+    run(["git", "cat-file", "-e", main_tip + "^{commit}"])
+    # Restore only the disposable remote fixture's original baseline/plan.
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
+    run(prepare)
+    assert planpath.read_bytes() == saved
+    # Both URLs exist but preparation must stop before writing any new plan.
+    remote2 = temp / "mirror.git"
+    run(["git", "init", "--bare", str(remote2)])
+    run(["git", "config", "--add", "remote.origin.pushurl", url])
+    run(
+        [
+            "git",
+            "config",
+            "--add",
+            "remote.origin.pushurl",
+            "file://localhost" + str(remote2),
+        ]
+    )
+    assert "one push URL required" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    assert run(["git", "ls-remote", str(remote2)])[0] == ""
+    run(["git", "config", "--unset-all", "remote.origin.pushurl"])
+    # Relative destinations can resolve differently in linked worktrees.
+    run(["git", "config", "remote.origin.pushurl", "../remote.git"])
+    assert "relative local push URL" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    run(["git", "config", "--unset", "remote.origin.pushurl"])
+    # Replacement refs and legacy grafts must fail before any evidence is saved.
+    run(["git", "replace", baseline, head])
+    assert "replacement objects" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    run(["git", "replace", "-d", baseline])
+    grafts = repo / ".git/info/grafts"
+    grafts.write_text(head + "\n")
+    assert "grafts are forbidden" in run(prepare, False)[1]
+    grafts.unlink()
+    # Synthetic credential: reject before contacting a server or saving it.
+    credential = "fixture-credential-do-not-use"
+    run(
+        [
+            "git",
+            "config",
+            "remote.origin.pushurl",
+            "https://user:" + credential + "@example.invalid/repo.git",
+        ]
+    )
+    output, error = run(prepare, False)
+    assert "credentials are forbidden" in error
+    assert credential not in output + error
+    assert credential not in planpath.read_text()
+    assert planpath.read_bytes() == saved
+    run(["git", "config", "--unset", "remote.origin.pushurl"])
+    # A forged baseline must be rejected before unavailable scan validation.
+    forged = {**plan, "remote_main": head, "scan_base": head}
+    forgedpath = temp / "forged.json"
+    forgedpath.write_text(json.dumps(forged))
+    args = [
+        "./scripts/review-gate",
+        "record",
+        str(forgedpath),
+        str(temp / "no-scan"),
+        str(temp / "no-agent"),
+    ]
+    assert "baseline changed or forged" in run(args, False)[1]
+    # Changing the actual remote baseline also invalidates an otherwise real plan.
+    run(["git", "--git-dir", str(remote), "fetch", str(repo), "feature"])
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head])
+    args[2] = str(planpath)
+    assert "baseline changed or forged" in run(args, False)[1]
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
+    # The destination appearing after preparation requires a new plan too.
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/feature", head])
+    assert "destination branch changed" in run(args, False)[1]
+    run(["git", "--git-dir", str(remote), "update-ref", "-d", "refs/heads/feature"])
+    rewrite_from = "https://consumer.invalid/repository.git"
+    rewrite_key = "url." + str(remote) + ".insteadOf"
+    run(["git", "config", rewrite_key, rewrite_from])
+    run(["git", "config", "remote.origin.url", rewrite_from])
+    forgedpath.write_text(json.dumps({**plan, "url": rewrite_from}))
+    rewrite_args = [*args]
+    rewrite_args[2] = str(forgedpath)
+    assert "URL rewrite changes" in run(rewrite_args, False)[1]
+    run(["git", "config", "--unset", rewrite_key])
+    run(["git", "config", "remote.origin.url", url])
+    # Local destination aliases may be retargeted without changing URL text.
+    alias = temp / "destination-alias"
+    alias.symlink_to(remote, target_is_directory=True)
+    for alias_url in (str(alias), "file://" + str(alias)):
+        run(["git", "config", "remote.origin.url", alias_url])
+        assert "symlinked local repository URL" in run(prepare, False)[1]
+    alias.unlink()
+    alias.symlink_to(remote2, target_is_directory=True)
+    assert "symlinked local repository URL" in run(prepare, False)[1]
+    run(["git", "config", "remote.origin.url", url])
+    # Preserve unrelated existing hook configurations and their files.
+    custom = temp / "custom-hooks"
+    custom.mkdir()
+    marker = custom / "pre-push"
+    marker.write_text("preserve custom hook")
+    run(["git", "config", "core.hooksPath", str(custom)])
+    run(["./scripts/install-hooks"], False)
+    assert marker.read_text() == "preserve custom hook"
+    assert run(["git", "config", "core.hooksPath"])[0] == str(custom)
+    run(["git", "config", "--unset", "core.hooksPath"])
+    default_hook = repo / ".git/hooks/pre-commit"
+    default_hook.write_text("#!/bin/sh\nexit 0\n")
+    default_hook.chmod(0o755)
+    assert "active default hook" in run(["./scripts/install-hooks"], False)[1]
+    assert default_hook.read_text() == "#!/bin/sh\nexit 0\n"
+    assert run(["git", "config", "--get", "core.hooksPath"], False)[0] == ""
+    default_hook.unlink()
+    run(["git", "config", "core.hooksPath", ".githooks"])
+    run(["./scripts/install-hooks"])
+    hooks = Path(run(["git", "config", "core.hooksPath"])[0])
+    # Configuration injected at push time cannot select a different receiver.
+    push_input = "refs/heads/feature " + head + " refs/heads/feature " + "0" * 40 + "\n"
+    override = subprocess.run(
+        [str(hooks / "review-gate"), "push", "origin", url],
+        cwd=repo,
+        env={
+            **env,
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "remote.origin.receivepack",
+            "GIT_CONFIG_VALUE_0": "fixture-custom-receive",
+        },
+        input=push_input,
+        capture_output=True,
+        text=True,
+    )
+    assert override.returncode != 0 and "custom receive-pack" in override.stderr
+    count += 1
+    # Re-enumerate push URLs before any destination is updated.
+    run(["git", "config", "--add", "remote.origin.pushurl", url])
+    run(
+        [
+            "git",
+            "config",
+            "--add",
+            "remote.origin.pushurl",
+            "file://localhost" + str(remote2),
+        ]
+    )
+    assert (
+        "one push URL required at push time"
+        in run(["git", "push", "origin", "feature"], False)[1]
+    )
+    assert run(["git", "ls-remote", str(remote), "refs/heads/feature"])[0] == ""
+    assert run(["git", "ls-remote", str(remote2)])[0] == ""
+    run(["git", "config", "--unset-all", "remote.origin.pushurl"])
+    assert hooks.is_absolute() and (hooks / "pre-push").is_file()
+    assert not (old_tree / ".githooks").exists()
+    # Actual Git pre-push from an older worktree must not bypass the gate.
+    output, error = run(
+        ["git", "push", "--dry-run", "origin", "old-feature"], False, old_tree
+    )
+    assert "BLOCKED: push gate" in error
+    assert run(["git", "ls-remote", "origin", "refs/heads/old-feature"])[0] == ""
+    run([str(hooks / "pre-commit")], False, old_tree)
+    old_inode = (hooks / "review-gate").stat().st_ino
+    with (hooks / "review-gate").open("rb") as opened:
+        old_content = opened.read()
+        run(["./scripts/install-hooks"])
+        opened.seek(0)
+        assert opened.read() == old_content
+    assert (hooks / "review-gate").stat().st_ino != old_inode
+    assert (hooks / "review-gate").read_bytes() == old_content
+    assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+    # Additional active hooks in another registered checkout must be preserved.
+    project_dir = old_tree / ".githooks"
+    project_dir.mkdir()
+    for name, content in (
+        ("commit-msg", "#!/bin/sh\nexit 23\n"),
+        ("prepare-commit-msg", "#!/bin/sh\nexit 24\n"),
+        ("pre-push", "#!/bin/sh\necho project check >&2\nexit 25\n"),
+    ):
+        project_hook = project_dir / name
+        project_hook.write_text(content)
+        project_hook.chmod(0o755)
+        before = {x.name: x.read_bytes() for x in hooks.iterdir() if x.is_file()}
+        assert "active project hook" in run(["./scripts/install-hooks"], False)[1]
+        assert project_hook.read_text() == content
+        assert all((hooks / name).read_bytes() == data for name, data in before.items())
+        assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+        project_hook.unlink()
+    project_dir.rmdir()
+    # Unexpected dormant shared hooks must not acquire authority on installation.
+    unexpected = hooks / "commit-msg"
+    unexpected.write_text("#!/bin/sh\nexit 37\n")
+    unexpected.chmod(0o755)
+    saved_hooks = {x.name: x.read_bytes() for x in hooks.iterdir() if x.is_file()}
+    run(["git", "config", "core.hooksPath", ".githooks"])
+    assert (
+        "unexpected executable shared hook"
+        in run(["./scripts/install-hooks"], False)[1]
+    )
+    assert run(["git", "config", "core.hooksPath"])[0] == ".githooks"
+    assert all(
+        (hooks / name).read_bytes() == data for name, data in saved_hooks.items()
+    )
+    unexpected.unlink()
+    run(["git", "config", "core.hooksPath", str(hooks)])
+    # A shared-directory symlink must not redirect installation or future hooks.
+    hooks_backup = temp / "hooks-backup"
+    hooks.rename(hooks_backup)
+    hooks_target = temp / "hooks-alias-target"
+    hooks_target.mkdir()
+    hooks.symlink_to(hooks_target, target_is_directory=True)
+    assert (
+        "shared hook directory is a symlink"
+        in run(["./scripts/install-hooks"], False)[1]
+    )
+    assert not list(hooks_target.iterdir())
+    hooks.unlink()
+    hooks.symlink_to(temp / "missing-hooks-target", target_is_directory=True)
+    assert (
+        "shared hook directory is a symlink"
+        in run(["./scripts/install-hooks"], False)[1]
+    )
+    assert not hooks.exists()
+    hooks.unlink()
+    hooks_backup.rename(hooks)
+    # A directory destination must fail before replacing any executable.
+    for name in ("review-gate", "pre-push", "pre-commit"):
+        destination = hooks / name
+        backup = temp / (name + "-backup")
+        destination.rename(backup)
+        destination.mkdir()
+        before = {
+            other.name: other.read_bytes()
+            for other in hooks.iterdir()
+            if other.is_file()
+        }
+        assert (
+            "destination is a directory" in run(["./scripts/install-hooks"], False)[1]
+        )
+        assert list(destination.iterdir()) == []
+        assert all(
+            (hooks / other).read_bytes() == content for other, content in before.items()
+        )
+        destination.rmdir()
+        backup.rename(destination)
+    # Worktree-specific config must not silently override shared installation.
+    run(["git", "config", "extensions.worktreeConfig", "true"])
+    run(["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=old_tree)
+    for spelling in ("true", "yes", "on", "1", "TRUE"):
+        run(["git", "config", "extensions.worktreeConfig", spelling])
+        assert (
+            "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+        )
+    run(["git", "config", "--worktree", "core.hooksPath", ""], cwd=old_tree)
+    assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+    absent_tree = temp / "temporarily-offline-tree"
+    old_tree.rename(absent_tree)
+    try:
+        assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "extensions.worktreeConfig", "false"])
+        assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "--unset", "extensions.worktreeConfig"])
+        assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        old_tree.mkdir()
+        run(["git", "init"], cwd=old_tree)
+        for spelling in ("true", "false"):
+            run(["git", "config", "extensions.worktreeConfig", spelling])
+            assert "different repository" in run(["./scripts/install-hooks"], False)[1]
+        import shutil
+
+        shutil.rmtree(old_tree)
+        run(["git", "config", "extensions.worktreeConfig", "true"])
+    finally:
+        absent_tree.rename(old_tree)
+    run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
+    dormant_local = temp / "dormant-local-hooks"
+    dormant_local.write_text("[core]\n hooksPath = " + str(custom) + "\n")
+    local_key = "includeIf.onbranch:release/**.path"
+    run(["git", "config", "--worktree", local_key, str(dormant_local)], cwd=old_tree)
+    assert "conditional includes" in run(["./scripts/install-hooks"], False)[1]
+    run(["git", "config", "--worktree", "--unset", local_key], cwd=old_tree)
+    # Dormant conditions must not become hook overrides after branch/new worktree changes.
+    dormant_file = temp / "dormant-hooks"
+    dormant_file.write_text("[core]\n hooksPath = " + str(custom) + "\n")
+    for dormant_key in (
+        "includeIf.onbranch:release/**.path",
+        "includeIf.gitdir:/future/worktree/.path",
+    ):
+        run(["git", "config", dormant_key, str(dormant_file)])
+        assert "conditional includes" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "--unset", dormant_key])
+    # Conditional includes can override hooks without worktreeConfig.
+    run(["git", "config", "--unset", "extensions.worktreeConfig"])
+    include_file = temp / "conditional-hooks"
+    include_file.write_text("[core]\n hooksPath = " + str(custom) + "\n")
+    old_gitdir = run(["git", "rev-parse", "--absolute-git-dir"], cwd=old_tree)[0]
+    include_key = "includeIf.gitdir:**/worktrees/" + Path(old_gitdir).name + ".path"
+    run(["git", "config", include_key, str(include_file)])
+    assert "effective worktree hooksPath" in run(["./scripts/install-hooks"], False)[1]
+    include_file.write_text("[core]\n hooksPath = .githooks\n")
+    assert "effective worktree hooksPath" in run(["./scripts/install-hooks"], False)[1]
+    run(["git", "config", "--unset", include_key])
+    run(["git", "config", "extensions.worktreeConfig", "true"])
+    # Introduced then removed content leaves an empty endpoint diff but history.
+    newline_tree = temp / "linked\nworktree"
+    run(
+        ["git", "worktree", "add", "-b", "newline-feature", str(newline_tree), baseline]
+    )
+    run(
+        ["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=newline_tree
+    )
+    assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+    run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=newline_tree)
+    run(["./scripts/install-hooks"])
+    # Avoid the project's intentionally absent checks for isolated fixture commits.
+    run(["git", "config", "core.hooksPath", str(temp / "fixture-no-hooks")])
+    (repo / "transient").write_text("fixture sensitive intermediate content")
+    run(["git", "add", "transient"])
+    run(["git", "commit", "-m", "test: intermediate"])
+    run(["git", "rm", "transient"])
+    run(["git", "commit", "-m", "test: removal"])
+    assert "exactly one new commit" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    multihead = run(["git", "rev-parse", "HEAD"])[0]
+    multi = {**plan, "head": multihead}
+    multipath = temp / "multi.json"
+    multipath.write_text(json.dumps(multi))
+    assert (
+        "exactly one new commit"
+        in run(
+            [
+                "./scripts/review-gate",
+                "record",
+                str(multipath),
+                str(temp / "no-scan"),
+                str(temp / "no-agent"),
+            ],
+            False,
+        )[1]
+    )
+    # External CLI fixture supplies a transition during pagination, without
+    # patching implementation functions; real GitHub observation is separate.
+    cli = temp / "cli"
+    cli.mkdir()
+    metadata = {
+        "headRefOid": head_fixture,
+        "mergeStateStatus": "CLEAN",
+        "mergeable": "MERGEABLE",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://example.invalid/pr/1",
+        "reviewDecision": "",
+        "latestReviews": [],
+    }
+    comments = [
+        [
+            {
+                "id": 1,
+                "updated_at": "2026-10-03T00:00:00Z",
+                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "body": summary_fixture,
+            }
+        ]
+    ]
+    graph = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "headRefOid": head_fixture,
+                    "reviewThreads": {
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                }
+            }
+        }
+    }
+    runner = cli / "gh"
+    runner.write_text(
+        '#!/usr/bin/env python3\nimport json\nfrom pathlib import Path\np=Path(__file__).parent\nc=p/"counter"\ni=int(c.read_text()) if c.exists() else 0\nc.write_text(str(i+1))\nprint(json.dumps(json.loads((p/"responses").read_text())[i]))\n'
+    )
+    runner.chmod(0o755)
+    for final, final_comments, expected in (
+        (metadata, comments, 0),
+        ({**metadata, "mergeStateStatus": "BLOCKED"}, comments, 3),
+        ({**metadata, "headRefOid": "b" * 40}, comments, 1),
+        ({**metadata, "reviewDecision": "CHANGES_REQUESTED"}, comments, 3),
+        ({**metadata, "latestReviews": [{"state": "CHANGES_REQUESTED"}]}, comments, 3),
+        (
+            metadata,
+            [
+                [
+                    {
+                        **comments[0][0],
+                        "body": summary_fixture.replace(
+                            "**Completed**", "**In progress**"
+                        ),
+                    }
+                ]
+            ],
+            3,
+        ),
+    ):
+        (cli / "counter").unlink(missing_ok=True)
+        (cli / "responses").write_text(
+            json.dumps(
+                [metadata, graph, final_comments, final, {"sha": head_fixture}, graph]
+            )
+        )
+        result = subprocess.run(
+            [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
+            env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == expected, (result.stdout, result.stderr)
+        assert (cli / "counter").read_text() == (
+            "4" if final["headRefOid"] != head_fixture else "6"
+        )
+        if expected == 3:
+            assert json.loads(result.stdout)["ready_at_observation"] is False
+        count += 1
+    # Same-prefix distinct commit must not inherit an older completed review.
+    (cli / "counter").unlink()
+    (cli / "responses").write_text(
+        json.dumps(
+            [metadata, graph, comments, metadata, {"sha": "aaaaaaa" + "b" * 33}, graph]
+        )
+    )
+    result = subprocess.run(
+        [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
+        env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 3, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)["bot_review"]["state"] == "waiting"
+    count += 1
+    # A thread created during later reads is visible in the final pagination.
+    late_graph = json.loads(json.dumps(graph))
+    late_graph["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"] = [
+        {"id": "late-thread", "isResolved": False}
+    ]
+    (cli / "counter").unlink()
+    (cli / "responses").write_text(
+        json.dumps(
+            [metadata, graph, comments, metadata, {"sha": head_fixture}, late_graph]
+        )
+    )
+    result = subprocess.run(
+        [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
+        env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 3, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)["unresolved_threads"] == ["late-thread"]
+    count += 1
+print(
+    "PASS:",
+    count,
+    "plugin-independent Git boundary checks; isolated local remotes only",
+)

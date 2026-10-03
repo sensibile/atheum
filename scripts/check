@@ -15,11 +15,11 @@ os.environ["HEX_HOME"] = str(root / ".cache" / "hex")
 mode = sys.argv[1] if len(sys.argv) == 2 else ""
 commands = {
     "format": [["mix", "format"]],
-    "precommit": [["mix", "format", "--check-formatted"], ["mix", "compile", "--force", "--warnings-as-errors"], ["mix", "credo", "--strict"], ["mix", "dialyzer"], ["mix", "test", "--warnings-as-errors"]],
+    "precommit": [[sys.executable, str(root / "scripts/test-push-boundary")], ["mix", "format", "--check-formatted"], ["mix", "compile", "--force", "--warnings-as-errors"], ["mix", "credo", "--strict"], ["mix", "dialyzer"], ["mix", "test", "--warnings-as-errors"]],
     "test-integration": [["mix", "test", "--warnings-as-errors", "--include", "integration"]],
 }
 if mode == "review":
-    steps = commands["precommit"] + commands["test-integration"]
+    steps = [[sys.executable, str(root / "scripts/test-push-gate")]] + commands["precommit"] + commands["test-integration"]
 elif mode in commands:
     steps = commands[mode]
 else:

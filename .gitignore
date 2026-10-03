@@ -16,3 +16,10 @@ erl_crash.dump
 *.db
 *.db/
 .DS_Store
+
+# Python hook-test bytecode is local cache.
+__pycache__/
+
+# Worktree runtime links are local dependencies, never source.
+/.cache
+/deps
