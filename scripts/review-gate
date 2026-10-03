@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Push planning and sealed Codex Security evidence gate. No model calls or push."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+
+def git(*args):
+    return subprocess.check_output(['git', *args], text=True).strip()
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def load(path):
+    return json.loads(Path(path).read_text())
+
+
+def store():
+    return Path(git('rev-parse', '--git-common-dir')).resolve() / 'push-reviews'
+
+
+def identity(plan):
+    values = [plan[k] for k in ('url', 'ref', 'remote_old', 'head')]
+    return hashlib.sha256(json.dumps(values).encode()).hexdigest()
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def revision(sha):
+    require(bool(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', sha)), 'full SHA required')
+    require(git('rev-parse', '--verify', sha + '^{commit}') == sha, 'not a commit')
+
+
+def plugin():
+    configured = os.environ.get('CODEX_SECURITY_PLUGIN_DIR')
+    if not configured:
+        result = subprocess.run(['git', 'config', '--get', 'codex.securityPluginDir'], capture_output=True, text=True)
+        configured = result.stdout.strip()
+    if configured:
+        candidates = [Path(configured).expanduser()]
+    else:
+        home = Path(os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))
+        candidates = sorted((home / 'plugins/cache/openai-curated-remote/codex-security').glob('*/scripts/validate_scan_contract.py'), key=lambda p: p.stat().st_mtime, reverse=True)
+        candidates = [p.parent.parent for p in candidates]
+    require(bool(candidates), 'Codex Security validator unavailable; set codex.securityPluginDir')
+    validator = candidates[0] / 'scripts/validate_scan_contract.py'
+    require(validator.is_file(), 'Codex Security validator missing')
+    return validator
+
+
+def agent_review(path, plan):
+    data = load(path)
+    require(data.get('kind') == 'agent' and data.get('verdict') == 'pass'
+            and data.get('independent') is True and data.get('blocking_findings') == []
+            and data.get('reviewed_base') == plan['scan_base']
+            and data.get('reviewed_head') == plan['head']
+            and bool(data.get('reviewer')) and bool(data.get('summary')),
+            'independent review missing, failed or out of range')
+
+
+def security_review(directory, plan):
+    directory = Path(directory).resolve(strict=True)
+    subprocess.run([sys.executable, str(plugin()), '--scan-dir', str(directory)], check=True, stdout=subprocess.DEVNULL)
+    manifest = load(directory / 'scan-manifest.json')
+    scan = manifest['scan']
+    target = scan['target']
+    require(scan['status'] == 'completed' and bool(scan['sealedAt']), 'scan is not completed and sealed')
+    require(scan['producer']['name'] == 'codex-security-plugin', 'unexpected scan producer')
+    require(target['kind'] == 'git_diff' and target['baseRevision'] == plan['scan_base']
+            and target['headRevision'] == plan['head'], 'security scan range mismatch')
+    require(target.get('remote', '').removesuffix('.git') == plan['url'].removesuffix('.git'), 'security repository mismatch')
+    coverage = load(directory / scan['coverageRef'])
+    findings = load(directory / scan['findingsRef'])
+    require(coverage['completeness'] == 'complete' and not coverage['deferred']
+            and not coverage['explicitExclusions'] and not coverage['excludePaths']
+            and coverage['includePaths'] == ['.']
+            and coverage['mode'] in ('diff', 'commit', 'branch_diff')
+            and not any(s['disposition'] == 'needs_follow_up' for s in coverage['surfaces']),
+            'incomplete or narrowed security coverage')
+    require(not findings['findings'], 'security findings block push; fix and rescan')
+    return {'directory': str(directory), 'manifest_sha256': digest(directory / 'scan-manifest.json')}
+
+
+def validate_plan(plan):
+    require(plan.get('version') == 2, 'unsupported push plan')
+    require(plan['ref'].startswith('refs/heads/') and plan['ref'] != 'refs/heads/main', 'use a feature branch and PR')
+    revision(plan['head'])
+    revision(plan['scan_base'])
+    if set(plan['remote_old']) != {'0'}:
+        require(plan['scan_base'] == plan['remote_old'], 'existing branch base mismatch')
+        revision(plan['remote_old'])
+    else:
+        revision(plan['remote_main'])
+        require(git('merge-base', plan['remote_main'], plan['head']) == plan['scan_base'], 'new branch baseline mismatch')
+
+
+def check_record(record):
+    plan = record['plan']
+    validate_plan(plan)
+    security = security_review(record['security']['directory'], plan)
+    require(security == record['security'], 'security evidence changed since registration')
+    path = record['agent']['path']
+    require(digest(path) == record['agent']['sha256'], 'agent evidence changed since registration')
+    agent_review(path, plan)
+
+
+def main():
+    mode = sys.argv[1]
+    if mode == 'prepare':
+        remote = sys.argv[2] if len(sys.argv) > 2 else 'origin'
+        branch = sys.argv[3] if len(sys.argv) > 3 else git('branch', '--show-current')
+        require(branch and branch != 'main', 'use a feature branch and PR')
+        subprocess.run(['git', 'check-ref-format', '--branch', branch], check=True, stdout=subprocess.DEVNULL)
+        require(not git('status', '--porcelain'), 'commit intended changes before preparing push')
+        ref = 'refs/heads/' + branch
+        head = git('rev-parse', ref + '^{commit}')
+        url = git('remote', 'get-url', '--push', remote)
+        require(len(url.splitlines()) == 1, 'one push URL required')
+        refs = dict(line.split()[::-1] for line in git('ls-remote', url, ref, 'refs/heads/main').splitlines())
+        old = refs.get(ref, '0' * len(head))
+        plan = {'version': 2, 'url': url, 'ref': ref, 'remote_old': old, 'head': head}
+        if set(old) == {'0'}:
+            main_sha = refs.get('refs/heads/main')
+            require(main_sha is not None, 'new branch needs an existing remote main baseline')
+            revision(main_sha)  # fetch if the advertised commit is not locally available
+            plan['remote_main'] = main_sha
+            plan['scan_base'] = git('merge-base', main_sha, head)
+        else:
+            plan['scan_base'] = old
+        validate_plan(plan)
+        folder = store() / 'plans'
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / (identity(plan) + '.json')
+        path.write_text(json.dumps(plan, indent=2) + '\n')
+        print('Push plan:', path)
+        print('Codex: run $codex-security:security-diff-scan on the unchanged range', plan['scan_base'], '..', head)
+        print('Then run an independent review on the same range. Do not edit, commit or push during either review.')
+        print('Register: ./scripts/review-gate record', path, 'COMPLETED_SCAN_DIR AGENT_JSON')
+        print('No scan, model call or push was executed.')
+    elif mode == 'record':
+        require(len(sys.argv) == 5, 'record PLAN_JSON COMPLETED_SCAN_DIR AGENT_JSON; manual security pass is not accepted')
+        plan = load(sys.argv[2])
+        validate_plan(plan)
+        security = security_review(sys.argv[3], plan)
+        path = Path(sys.argv[4]).resolve(strict=True)
+        agent_review(path, plan)
+        record = {'plan': plan, 'security': security, 'agent': {'path': str(path), 'sha256': digest(path)}}
+        folder = store()
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / (identity(plan) + '.json')
+        target.write_text(json.dumps(record, indent=2) + '\n')
+        print('Registered sealed scan and independent review:', target)
+    elif mode == 'push':
+        url = sys.argv[3]
+        for line in sys.stdin:
+            local_ref, head, ref, old = line.split()
+            require(set(head) != {'0'}, 'ref deletion is blocked')
+            require(ref.startswith('refs/heads/') and ref != 'refs/heads/main', 'only feature branches; main requires a PR')
+            key = identity({'url': url, 'ref': ref, 'remote_old': old, 'head': head})
+            record = load(store() / (key + '.json'))
+            require({k: record['plan'][k] for k in ('url', 'ref', 'remote_old', 'head')} == {'url': url, 'ref': ref, 'remote_old': old, 'head': head}, 'push plan mismatch')
+            check_record(record)
+        print('pre-push: sealed Codex Security and independent review verified')
+    else:
+        raise ValueError('usage: review-gate prepare [REMOTE BRANCH] | record PLAN SCAN_DIR AGENT_JSON | push REMOTE URL')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (ValueError, OSError, KeyError, IndexError, TypeError, subprocess.CalledProcessError) as error:
+        print('BLOCKED: push gate:', error, file=sys.stderr)
+        sys.exit(1)

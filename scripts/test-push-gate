@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Synthetic integration tests. These fixtures are NOT product security reviews."""
+import copy
+import importlib.util
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+sys.dont_write_bytecode = True
+root = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('gate', root / 'scripts/review-gate')
+# Extensionless executable needs an explicit source loader.
+from importlib.machinery import SourceFileLoader
+spec = importlib.util.spec_from_loader('gate', SourceFileLoader('gate', str(root / 'scripts/review-gate')))
+gate = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gate)
+plugin = gate.plugin().parent.parent
+example = plugin / 'examples/completed-scan'
+count = 0
+with tempfile.TemporaryDirectory(prefix='push-gate-test-') as tmp:
+    temp = Path(tmp).resolve()
+    repo = temp / 'repo'
+    repo.mkdir()
+    def run(args, success=True, stdin=None):
+        global count
+        result = subprocess.run(args, cwd=repo, text=True, input=stdin, capture_output=True)
+        assert (result.returncode == 0) == success, (args, result.stdout, result.stderr)
+        count += 1
+        return result.stdout.strip()
+    run(['git', 'init', '-b', 'main'])
+    run(['git', 'config', 'user.name', 'Synthetic Test'])
+    run(['git', 'config', 'user.email', 'test@example.invalid'])
+    (repo / 'scripts').mkdir()
+    shutil.copy2(root / 'scripts/review-gate', repo / 'scripts/review-gate')
+    shutil.copy2(root / 'scripts/prepare-push', repo / 'scripts/prepare-push')
+    (repo / '.githooks').mkdir()
+    shutil.copy2(root / '.githooks/pre-push', repo / '.githooks/pre-push')
+    run(['git', 'add', '.'])
+    run(['git', 'commit', '-m', 'test: baseline'])
+    baseline = run(['git', 'rev-parse', 'HEAD'])
+    remote = temp / 'remote.git'
+    run(['git', 'init', '--bare', str(remote)])
+    remote_url = 'file://localhost' + str(remote)
+    run(['git', 'remote', 'add', 'origin', remote_url])
+    run(['git', 'push', 'origin', 'main'])
+    run(['git', 'checkout', '-b', 'feature'])
+    (repo / 'file').write_text('feature\n')
+    run(['git', 'add', '.']); run(['git', 'commit', '-m', 'test: feature'])
+    head = run(['git', 'rev-parse', 'HEAD'])
+    run(['git', 'config', 'core.hooksPath', '.githooks'])
+    run(['git', 'config', 'codex.securityPluginDir', str(plugin)])
+    run(['./scripts/prepare-push', 'origin', 'feature'])
+    folder = Path(run(['git', 'rev-parse', '--git-common-dir'])) / 'push-reviews'
+    planpath = next((repo / folder / 'plans').glob('*.json'))
+    plan = json.loads(planpath.read_text())
+    assert plan['scan_base'] == baseline and plan['remote_old'] == '0' * len(head)
+    run(['git', 'push', 'origin', 'feature'], False)
+    agent = temp / 'agent.json'
+    agentdata = {'kind':'agent', 'verdict':'pass', 'independent':True, 'reviewed_base':baseline, 'reviewed_head':head, 'reviewer':'synthetic fixture', 'summary':'Not an actual review', 'blocking_findings':[]}
+    agent.write_text(json.dumps(agentdata))
+    scan = temp / 'scan'; scan.mkdir()
+    manifest = json.loads((example / 'scan-manifest.json').read_text())
+    coverage = json.loads((example / 'coverage.json').read_text())
+    findings = json.loads((example / 'findings.json').read_text())
+    manifest['scan']['target'] = {'kind':'git_diff', 'targetId':'synthetic-test', 'displayName':'fixture', 'remote':remote_url, 'baseRevision':baseline, 'headRevision':head, 'snapshotDigest':'codex-security-snapshot/v1:sha256:' + 'a'*64}
+    manifest['scan'].pop('sealedAt'); manifest['scan'].pop('artifacts')
+    coverage['mode'] = 'diff'; coverage['inventoryStrategy'] = 'diff'
+    coverage['surfaces'][0]['disposition'] = 'no_issue_found'
+    findings['findings'] = []
+    def seal(m=manifest, c=coverage, f=findings):
+        for name, value in [('scan-manifest.json',m),('coverage.json',c),('findings.json',f)]:
+            (scan / name).write_text(json.dumps(value))
+        run([sys.executable, str(plugin / 'scripts/finalize_scan_contract.py'), '--scan-dir', str(scan)])
+    record = ['./scripts/review-gate', 'record', str(planpath), str(scan), str(agent)]
+    seal()
+    run(record)
+    # Full git push exercises the actual Git hook stdin protocol.
+    run(['git', 'push', '--dry-run', 'origin', 'feature'])
+    bad = copy.deepcopy(manifest); bad['scan']['target']['headRevision'] = baseline
+    seal(bad); run(record, False)
+    bad = copy.deepcopy(coverage); bad['completeness'] = 'partial'
+    seal(c=bad); run(record, False)
+    seal()
+    bad = json.loads((scan / 'scan-manifest.json').read_text()); bad['scan']['status'] = 'failed'
+    (scan / 'scan-manifest.json').write_text(json.dumps(bad)); run(record, False)
+    # Official sealed fixture with a finding: validator succeeds but gate blocks.
+    original = json.loads((example / 'findings.json').read_text())
+    badcov = copy.deepcopy(coverage); badcov['surfaces'][0]['disposition'] = 'reported'
+    seal(c=badcov, f=original); run(record, False)
+    seal(); run(record)
+    (scan / 'coverage.json').write_text('{}')
+    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
+    seal(); run(record)
+    agent.write_text(json.dumps({**agentdata, 'summary':'changed'}))
+    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
+    agent.write_text(json.dumps(agentdata)); run(record)
+    run(['git', 'push', '--dry-run', 'origin', 'feature'])
+    # New commit makes the old receipt stale.
+    (repo / 'file').write_text('changed\n'); run(['git','add','.']); run(['git','commit','-m','test: changed'])
+    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
+    run(['./scripts/review-gate','record','url','ref','old','head','security.json','agent.json'],False)
+    # main and deletion are rejected directly even without a matching receipt.
+    zero = '0' * len(head)
+    args = ['./.githooks/pre-push', 'origin', remote_url]
+    run(args, False, f'refs/heads/feature {head} refs/heads/main {baseline}\n')
+    run(args, False, f'(delete) {zero} refs/heads/feature {head}\n')
+    run(args, False, f'refs/heads/feature {head} refs/tags/v1 {zero}\n')
+print('PASS:', count, 'synthetic integration assertions; no hosted review or real remote push')
