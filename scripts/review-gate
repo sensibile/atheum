@@ -738,8 +738,10 @@ def main():
         ordinary_objects()
         url = safe_push_url(sys.argv[3])
         push_destination(sys.argv[2], url)
-        for line in sys.stdin:
-            local_ref, head, ref, old = line.split()
+        updates = tuple(tuple(line.split()) for line in sys.stdin)
+        require(all(len(update) == 4 for update in updates), "malformed push update")
+        pushed_refs = frozenset(update[2] for update in updates)
+        for local_ref, head, ref, old in updates:
             require(set(head) != {"0"}, "ref deletion is blocked")
             require(
                 ref.startswith("refs/heads/") and ref != "refs/heads/main",
@@ -751,6 +753,10 @@ def main():
                 {k: record["plan"][k] for k in ("url", "ref", "remote_old", "head")}
                 == {"url": url, "ref": ref, "remote_old": old, "head": head},
                 "push plan mismatch",
+            )
+            require(
+                record["plan"]["target_ref"] not in pushed_refs,
+                "PR target is updated by the same push; push target separately, then prepare and review again",
             )
             check_record(record)
         print("pre-push: sealed Codex Security and independent review verified")

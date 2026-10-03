@@ -379,6 +379,49 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     agent.write_text(json.dumps(agentdata))
     run(record)
     run(["git", "push", "--dry-run", "origin", "feature"])
+    # All receipts can be individually valid while one push changes another
+    # receipt's PR target. Exercise the real Git hook and local bare remote.
+    feature_receipt = receiptpath.read_bytes()
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/release", baseline])
+    for branch, target in (
+        ("release", "main"),
+        ("unrelated", "main"),
+        ("feature", "release"),
+    ):
+        if branch != "feature":
+            run(["git", "branch", branch, head])
+        run(["./scripts/prepare-push", "origin", branch, target])
+        selected_plan = max(
+            (repo / folder / "plans").glob("*.json"), key=lambda p: p.stat().st_mtime_ns
+        )
+        run(
+            [
+                "./scripts/review-gate",
+                "record",
+                str(selected_plan),
+                str(scan),
+                str(agent),
+            ]
+        )
+    run(["git", "push", "--dry-run", "origin", "feature"])
+    run(["git", "push", "--dry-run", "origin", "release"])
+    run(["git", "push", "--dry-run", "origin", "feature", "unrelated"])
+    for branches in (("release", "feature"), ("feature", "release")):
+        result = subprocess.run(
+            ["git", "push", "--dry-run", "origin", *branches],
+            cwd=repo,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "PR target is updated by the same push" in result.stderr, result.stderr
+        count += 1
+    assert run(["git", "ls-remote", "origin", "refs/heads/release"]) == (
+        baseline + "\trefs/heads/release"
+    )
+    assert not run(["git", "ls-remote", "origin", "refs/heads/feature"])
+    receiptpath.write_bytes(feature_receipt)
     # New commit makes the old receipt stale.
     (repo / "file").write_text("changed\n")
     run(["git", "add", "."])
