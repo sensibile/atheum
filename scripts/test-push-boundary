@@ -177,7 +177,11 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     fetch_head = repo / ".git/FETCH_HEAD"
     fetch_before = fetch_head.read_bytes() if fetch_head.exists() else None
     run(prepare)
-    advanced = json.loads(planpath.read_text())
+    advanced_path = max(
+        (repo / ".git/push-reviews/plans").glob("*.json"),
+        key=lambda p: p.stat().st_mtime_ns,
+    )
+    advanced = json.loads(advanced_path.read_text())
     assert advanced["remote_main"] == main_tip and advanced["scan_base"] == baseline
     assert run(["git", "rev-parse", "HEAD"])[0] == head
     assert (fetch_head.read_bytes() if fetch_head.exists() else None) == fetch_before
@@ -255,6 +259,20 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/feature", head])
     assert "destination branch changed" in run(args, False)[1]
     run(["git", "--git-dir", str(remote), "update-ref", "-d", "refs/heads/feature"])
+    # An explicitly selected PR target is honored, and invalid targets fail closed.
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/release", baseline])
+    run(["./scripts/prepare-push", "origin", "feature", "release"])
+    release_path = max(
+        (repo / ".git/push-reviews/plans").glob("*.json"),
+        key=lambda p: p.stat().st_mtime_ns,
+    )
+    release_plan = json.loads(release_path.read_text())
+    assert release_plan["target_ref"] == "refs/heads/release"
+    assert release_plan["scan_base"] == baseline
+    run(["./scripts/prepare-push", "origin", "feature", "missing"], False)
+    run(["./scripts/prepare-push", "origin", "feature", "feature"], False)
+    run(["./scripts/prepare-push", "origin", "feature", "../invalid"], False)
+    run(prepare)
     rewrite_from = "https://consumer.invalid/repository.git"
     rewrite_key = "url." + str(remote) + ".insteadOf"
     run(["git", "config", rewrite_key, rewrite_from])

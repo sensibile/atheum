@@ -8,7 +8,7 @@
 - 구조 변경 디텍터는 연구 중이며 현재 필수 gate에 포함하지 않는다.
 - 코드 작성 후 `.githooks/post-code`를 실행한다. 이는 Git 표준 이벤트가 아니라 에이전트/편집기가 호출하는 명시적 훅이다. 자동 stage하지 않는다. 포맷 후 diff를 확인한다.
 - pre-commit은 포맷 검증, 정적 분석, 빠른 core/경계 테스트를 실행한다. 파일/index를 수정하지 않는다. 기존 프로젝트 검사를 유지한다.
-- pre-push는 push할 정확한 base/head와 원격/ref에 대한 보안·독립 에이전트 리뷰 결과를 확인한다. 도구 오류, 미실행, blocking finding은 통과가 아니다.
+- pre-push는 PR 대상 브랜치의 merge-base부터 최종 head까지 전체 누적 범위와 push 원격/ref에 대한 보안·독립 에이전트 리뷰 결과를 확인한다. 도구 오류, 미실행, blocking finding은 통과가 아니다.
 - 외부 모델로 소스를 전달하려면 먼저 데이터 전달 범위를 설명하고 BOSS의 승인을 받는다. 리뷰는 코드를 수정하거나 commit/push하지 않는다.
 - 한 커밋은 한 의도다. 무관한 포맷/리팩터링을 섞지 않는다. 제목은 `feat|fix|refactor|test|docs|chore: 변경 요약`이다. 필요하면 본문에 이유·제약·호환성을 적는다.
 - main 변경은 작업 브랜치와 PR을 거친다. Draft PR을 허용한다. 기본 squash merge이며 단계 이력이 중요할 때만 일반 merge를 선택한다.
@@ -19,8 +19,8 @@
 
 ## Codex push 준비 절차
 
-- push 요청을 받으면 먼저 `./scripts/prepare-push origin BRANCH`로 불변 계획을 만든다. 준비 명령은 검사나 push를 실행하지 않는다.
-- 계획의 정확한 scan_base/head에 `$codex-security:security-diff-scan`을 적용한다. 설치된 스킬의 preflight, 위협 모델, 발견·검증, coverage 및 완료 절차를 따르고 sealed canonical 결과를 보존한다.
+- push 요청을 받으면 먼저 `./scripts/prepare-push origin BRANCH [TARGET_BRANCH]`로 불변 계획을 만든다. 준비 명령은 검사나 push를 실행하지 않는다.
+- TARGET_BRANCH는 실제 PR 대상이며 기본 main이다. 기존 원격 브랜치가 있어도 직전 push 이후 변경분으로 축소하지 않는다. 계획의 정확한 scan_base/head에 `$codex-security:security-diff-scan`을 적용한다. 설치된 스킬의 preflight, 위협 모델, 발견·검증, coverage 및 완료 절차를 따르고 sealed canonical 결과를 보존한다.
 - 같은 범위를 구현 대화 없이 독립 에이전트에게 리뷰하도록 한다. 에이전트 실행은 이 절차에서 명시적으로 허용한다. 코드·요구사항·검증 근거만 전달하고 수정·commit·push 권한은 주지 않는다.
 - 외부 모델 데이터 전달 승인이 없으면 검사 실행 전에 범위를 설명하고 승인받는다. 계획 생성과 로컬 검증은 계속 진행할 수 있다.
 - `review-gate record PLAN_JSON COMPLETED_SCAN_DIR AGENT_JSON`으로 완료 결과를 등록한다. Git pre-push가 canonical seal과 범위·내용 변경을 다시 검증한다. 수동 security pass는 허용하지 않는다.
