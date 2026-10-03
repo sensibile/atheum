@@ -393,6 +393,56 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     )
     count += 1
     run(["git", "config", "--unset", rewrite_key])
+    # The committed config delimiter must preserve newline submodule paths.
+    newline_parent = temp / "newline-parent"
+    run(
+        ["git", "clone", "--branch", "main", str(parent_remote), str(newline_parent)],
+        cwd=parent,
+    )
+    run(["git", "config", "user.name", "Synthetic Test"], cwd=newline_parent)
+    run(["git", "config", "user.email", "test@example.invalid"], cwd=newline_parent)
+    run(
+        ["git", "config", "-f", ".gitmodules", "submodule.child.path", "child\npath"],
+        cwd=newline_parent,
+    )
+    run(["git", "update-index", "--force-remove", "child"], cwd=newline_parent)
+    run(
+        [
+            "git",
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "160000," + baseline + ",child\npath",
+        ],
+        cwd=newline_parent,
+    )
+    run(["git", "add", ".gitmodules"], cwd=newline_parent)
+    run(["git", "commit", "-m", "test: newline path baseline"], cwd=newline_parent)
+    newline_base = run(["git", "rev-parse", "HEAD"], cwd=newline_parent)
+    run(
+        ["git", "update-index", "--cacheinfo", "160000," + head + ",child\npath"],
+        cwd=newline_parent,
+    )
+    run(["git", "commit", "-m", "test: newline path update"], cwd=newline_parent)
+    newline_head = run(["git", "rev-parse", "HEAD"], cwd=newline_parent)
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(newline_parent)
+        assert gate.submodule_url(newline_base, "child\npath") == remote_url
+        gate.submodule_reviews(
+            {"scan_base": newline_base, "head": newline_head},
+            {
+                "child\npath": {
+                    "repository": str(repo),
+                    "receipts": [
+                        {"path": str(receiptpath), "sha256": gate.digest(receiptpath)}
+                    ],
+                }
+            },
+        )
+    finally:
+        os.chdir(previous_cwd)
+    count += 1
     # A fork receipt cannot authorize a consumer URL where the SHA is absent.
     child_receipt = json.loads(receiptpath.read_text())
     original_child_receipt = receiptpath.read_bytes()

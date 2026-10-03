@@ -82,6 +82,10 @@ if [ -z "$existing" ]; then
     fi
   done
 fi
+if [ -L "$hooks" ]; then
+  echo 'BLOCKED: shared hook directory is a symlink; reconcile manually' >&2
+  exit 1
+fi
 mkdir -p "$hooks"
 for name in review-gate pre-push pre-commit; do
   if [ -d "$hooks/$name" ]; then

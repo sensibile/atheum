@@ -282,7 +282,16 @@ def ordinary_objects():
     )
 
 
+def standard_receive_pack(remote):
+    result = subprocess.run(
+        ["git", "config", "--get-all", "remote." + remote + ".receivepack"],
+        capture_output=True,
+    )
+    require(result.returncode == 1, "custom receive-pack configuration is forbidden")
+
+
 def push_destination(remote, url):
+    standard_receive_pack(remote)
     safe_push_url(url)
     if remote in git("remote").splitlines():
         urls = git("remote", "get-url", "--push", "--all", remote).splitlines()
@@ -299,6 +308,7 @@ def submodule_url(revision, path):
             "config",
             "--blob",
             revision + ":.gitmodules",
+            "--null",
             "--get-regexp",
             r"^submodule\..*\.path$",
         ],
@@ -307,9 +317,9 @@ def submodule_url(revision, path):
     )
     require(result.returncode == 0, "submodule path missing from committed .gitmodules")
     keys = [
-        line.split(None, 1)[0]
-        for line in result.stdout.splitlines()
-        if len(line.split(None, 1)) == 2 and line.split(None, 1)[1] == path
+        record.split("\n", 1)[0]
+        for record in result.stdout.split("\0")
+        if "\n" in record and record.split("\n", 1)[1] == path
     ]
     require(len(keys) == 1, "submodule path must have one committed URL")
     url = git(
@@ -494,6 +504,7 @@ def main():
             not git("status", "--porcelain"),
             "commit intended changes before preparing push",
         )
+        standard_receive_pack(remote)
         ref = "refs/heads/" + branch
         head = git("rev-parse", ref + "^{commit}")
         url = git("remote", "get-url", "--push", "--all", remote)

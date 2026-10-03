@@ -96,6 +96,9 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     head = run(["git", "rev-parse", "HEAD"])[0]
     prepare = ["./scripts/prepare-push", "origin", "feature"]
     run(prepare)
+    run(["git", "config", "remote.origin.receivepack", "fixture-custom-receive"])
+    assert "custom receive-pack" in run(prepare, False)[1]
+    run(["git", "config", "--unset", "remote.origin.receivepack"])
     # Harmless installed helper proves Git's execution path, then the gate must
     # reject repository/remote URL selection before that helper can run.
     helper_bin = temp / "helper-bin"
@@ -266,6 +269,23 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["git", "config", "core.hooksPath", ".githooks"])
     run(["./scripts/install-hooks"])
     hooks = Path(run(["git", "config", "core.hooksPath"])[0])
+    # Configuration injected at push time cannot select a different receiver.
+    push_input = "refs/heads/feature " + head + " refs/heads/feature " + "0" * 40 + "\n"
+    override = subprocess.run(
+        [str(hooks / "review-gate"), "push", "origin", url],
+        cwd=repo,
+        env={
+            **env,
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "remote.origin.receivepack",
+            "GIT_CONFIG_VALUE_0": "fixture-custom-receive",
+        },
+        input=push_input,
+        capture_output=True,
+        text=True,
+    )
+    assert override.returncode != 0 and "custom receive-pack" in override.stderr
+    count += 1
     # Re-enumerate push URLs before any destination is updated.
     run(["git", "config", "--add", "remote.origin.pushurl", url])
     run(
@@ -302,6 +322,26 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     assert (hooks / "review-gate").stat().st_ino != old_inode
     assert (hooks / "review-gate").read_bytes() == old_content
     assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+    # A shared-directory symlink must not redirect installation or future hooks.
+    hooks_backup = temp / "hooks-backup"
+    hooks.rename(hooks_backup)
+    hooks_target = temp / "hooks-alias-target"
+    hooks_target.mkdir()
+    hooks.symlink_to(hooks_target, target_is_directory=True)
+    assert (
+        "shared hook directory is a symlink"
+        in run(["./scripts/install-hooks"], False)[1]
+    )
+    assert not list(hooks_target.iterdir())
+    hooks.unlink()
+    hooks.symlink_to(temp / "missing-hooks-target", target_is_directory=True)
+    assert (
+        "shared hook directory is a symlink"
+        in run(["./scripts/install-hooks"], False)[1]
+    )
+    assert not hooks.exists()
+    hooks.unlink()
+    hooks_backup.rename(hooks)
     # A directory destination must fail before replacing any executable.
     for name in ("review-gate", "pre-push", "pre-commit"):
         destination = hooks / name

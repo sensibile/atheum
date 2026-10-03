@@ -93,3 +93,7 @@ worktree 목록은 `--porcelain -z`와 NUL-safe reader로 읽어 줄바꿈이 �
 추가 경계: 훅 설치는 등록된 checkout의 실제 common Git 디렉터리를 비교하고, hooksPath가 없을 때 활성 기본 훅을 보존하기 위해 설치를 거부한다. 로컬 push URL은 심볼릭 링크 경유를 거부하며 canonical 경로를 사용해야 한다. PR 상태 조회는 마지막 API 조회 뒤 스레드를 다시 페이지 조회하지만 원자적 스냅샷은 아니며 실제 merge 시점의 GitHub 보호 규칙이 최종 gate다.
 
 조건부 include를 포함한 모든 checkout의 hooksPath 출처를 검사한다. 선언된 저장소와 다른 위치로 확장하는 URL rewrite는 거부한다. 봇 요약의 짧은 커밋 ID는 GitHub commit API의 전체 SHA로 확인하며 모호하거나 조회할 수 없는 ID는 완료로 인정하지 않는다.
+
+공유 codex-hooks 디렉터리 자체의 심볼릭 링크도 설치 전에 거부한다. 기존·끊어진 링크 모두 대상 파일이나 hooksPath를 수정하지 않는다.
+
+커밋된 .gitmodules 경로는 NUL record와 첫 newline 구분자로 읽어 경로 안의 줄바꿈을 보존한다. 준비·실제 훅은 remote.<name>.receivepack 설정(명령행 -c 주입 포함)을 거부한다. 지원하는 전달 명령은 일반 git push origin BRANCH이며 --receive-pack/--exec는 금지한다. Git은 그 명령행 옵션을 pre-push 인자로 전달하지 않으므로 훅만으로 이를 강제할 수 없다. --no-verify와 같은 소유자 우회는 신뢰 경계 밖이며 서버 보호 규칙을 대신하지 않는다.
