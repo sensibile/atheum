@@ -77,6 +77,16 @@ with tempfile.TemporaryDirectory(prefix='push-gate-test-') as tmp:
     record = ['./scripts/review-gate', 'record', str(planpath), str(scan), str(agent)]
     seal()
     run(record)
+    # Desktop producer's actual contract omits the optional remote field.
+    without_remote = copy.deepcopy(manifest)
+    without_remote['scan']['target'].pop('remote')
+    seal(without_remote); run(record)
+    run(['git', 'push', '--dry-run', 'origin', 'feature'])
+    other_repo = copy.deepcopy(manifest)
+    other_repo['scan']['target']['remote'] = 'https://example.invalid/other.git'
+    seal(other_repo); run(record, False)
+    assert gate.repository_location('git@github.com:sensibile/axiom.git') == gate.repository_location('https://github.com/sensibile/axiom.git')
+    seal(); run(record)
     # Full git push exercises the actual Git hook stdin protocol.
     run(['git', 'push', '--dry-run', 'origin', 'feature'])
     bad = copy.deepcopy(manifest); bad['scan']['target']['headRevision'] = baseline

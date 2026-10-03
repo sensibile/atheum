@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 
 def git(*args):
@@ -67,6 +68,19 @@ def agent_review(path, plan):
             'independent review missing, failed or out of range')
 
 
+def repository_location(remote):
+    """Optional producer URLs may omit SSH user or use HTTPS instead of SSH."""
+    if '://' in remote:
+        parsed = urlsplit(remote)
+        host, path = parsed.hostname, parsed.path
+    else:
+        match = re.fullmatch(r'(?:[^@]+@)?([^:]+):(.+)', remote)
+        require(match is not None, 'unrecognized declared repository location')
+        host, path = match.groups()
+    require(bool(host) and bool(path), 'invalid declared repository location')
+    return host.lower(), path.strip('/').removesuffix('.git')
+
+
 def security_review(directory, plan):
     directory = Path(directory).resolve(strict=True)
     subprocess.run([sys.executable, str(plugin()), '--scan-dir', str(directory)], check=True, stdout=subprocess.DEVNULL)
@@ -77,7 +91,11 @@ def security_review(directory, plan):
     require(scan['producer']['name'] == 'codex-security-plugin', 'unexpected scan producer')
     require(target['kind'] == 'git_diff' and target['baseRevision'] == plan['scan_base']
             and target['headRevision'] == plan['head'], 'security scan range mismatch')
-    require(target.get('remote', '').removesuffix('.git') == plan['url'].removesuffix('.git'), 'security repository mismatch')
+    # Desktop producer may omit optional remote. Exact full base/head hashes
+    # bind the reviewed Git objects; receipt independently binds push destination.
+    if target.get('remote'):
+        require(repository_location(target['remote']) == repository_location(plan['url']),
+                'security repository mismatch')
     coverage = load(directory / scan['coverageRef'])
     findings = load(directory / scan['findingsRef'])
     require(coverage['completeness'] == 'complete' and not coverage['deferred']
