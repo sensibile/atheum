@@ -85,3 +85,7 @@ push 성공은 PR 피드백 처리 완료가 아니다. 최신 head에서 봇 �
 하위 URL은 file/HTTP(S)/SSH/Git 전송과 절대 로컬 경로만 지원하며 `<helper>::<address>` 및 임의 scheme은 Git 호출 전에 차단한다. 설치 대상 실행파일 경로가 디렉터리이면 기존 상태를 보존하고 차단한다. PR 완료 관찰은 thread pagination 뒤 최신 봇 요약과 metadata를 읽으며, 최종 reviewDecision/각 리뷰어의 latestReviews에 Changes requested가 남으면 mergeable 표시와 무관하게 차단한다.
 
 등록된 worktree를 검사할 수 없거나 설정 조회가 오류이면 설치를 차단한다. `reported` coverage도 push를 차단한다. 하위 원격 도달 가능성은 receipt 목적지 ref를 먼저 검사하고 tip을 순차적으로 검증하며, 첫 증명 이후 관련 없는 ref를 fetch하지 않는다. 특정 tip fetch 실패만으로 종료하지 않으며 어느 ref에서도 증명하지 못하면 차단한다.
+
+worktree 목록은 `--porcelain -z`와 NUL-safe reader로 읽어 줄바꿈이 있는 경로도 검사한다. 새 브랜치 준비 시 advertised main 객체가 없으면 local ref/FETCH_HEAD를 갱신하지 않고 해당 SHA만 fetch한 뒤 baseline을 검증한다. pre-commit 경계 테스트는 모듈 로드 전 bytecode 쓰기를 끈다.
+
+`-`로 시작하는 repository URL은 Git 옵션으로 해석되지 않도록 모든 목적지 검증에서 거부하며, ls-remote/fetch에도 옵션 종료자 `--`를 사용한다.

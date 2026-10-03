@@ -58,12 +58,16 @@ for remote_url in (
     "ext::payload",
     "evil://host/repo",
     "ftp://host/repo",
+    "--upload-pack=evil:x",
 ):
     try:
         gate.safe_push_url(remote_url)
         raise AssertionError("remote helper URL accepted")
     except ValueError as error:
-        assert "remote-helper" in str(error) or "unsupported" in str(error)
+        assert any(
+            reason in str(error)
+            for reason in ("remote-helper", "unsupported", "option-like")
+        )
 count = 0
 with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     temp = Path(tmp).resolve()

@@ -21,31 +21,37 @@ else
   fi
   worktree_config=false
 fi
-worktrees=$(git worktree list --porcelain)
-printf '%s\n' "$worktrees" | while IFS= read -r line; do
-  case "$line" in
-    'worktree '*)
-      path=${line#worktree }
-      if ! git -C "$path" rev-parse --git-common-dir >/dev/null 2>&1; then
-        echo 'BLOCKED: registered worktree cannot be inspected' >&2
-        exit 1
-      fi
-      if [ "$worktree_config" = true ]; then
-        if override=$(git -C "$path" config --worktree --get core.hooksPath); then
-          if [ "$override" != "$hooks" ]; then
-            echo 'BLOCKED: a worktree hooksPath override exists; reconcile manually' >&2
-            exit 1
-          fi
-        else
-          result=$?
-          if [ "$result" -ne 1 ]; then
-            echo 'BLOCKED: worktree hook configuration cannot be inspected' >&2
-            exit 1
-          fi
-        fi
-      fi ;;
-  esac
-done
+python3 - "$hooks" "$worktree_config" <<'PY'
+import os
+import subprocess
+import sys
+
+hooks, enabled = sys.argv[1:]
+records = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"])
+for record in records.split(b"\0"):
+    if not record.startswith(b"worktree "):
+        continue
+    path = os.fsdecode(record[len(b"worktree "):])
+    available = subprocess.run(
+        ["git", "-C", path, "rev-parse", "--git-common-dir"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if available.returncode:
+        sys.exit("BLOCKED: registered worktree cannot be inspected")
+    if enabled != "true":
+        continue
+    result = subprocess.run(
+        ["git", "-C", path, "config", "--worktree", "--get", "core.hooksPath"],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        # Strip only Git's record delimiter, preserving whitespace in paths.
+        override = os.fsdecode(result.stdout.removesuffix(b"\n"))
+        if override != hooks:
+            sys.exit("BLOCKED: a worktree hooksPath override exists; reconcile manually")
+    elif result.returncode != 1:
+        sys.exit("BLOCKED: worktree hook configuration cannot be inspected")
+PY
 mkdir -p "$hooks"
 for name in review-gate pre-push pre-commit; do
   if [ -d "$hooks/$name" ]; then

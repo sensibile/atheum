@@ -13,6 +13,8 @@ from importlib.machinery import SourceFileLoader
 if sys.flags.optimize:
     sys.exit("BLOCKED: tests require Python assertions; disable optimization")
 
+sys.dont_write_bytecode = True
+
 ROOT = Path(__file__).resolve().parents[1]
 count = 0
 status = SourceFileLoader(
@@ -114,12 +116,46 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         run(prepare, False)
         assert not marker.exists()
     run(["git", "remote", "set-url", "origin", url])
+    option_helper = helper_bin / "boundary-option:x"
+    shutil.copy2(helper, option_helper)
+    marker.unlink(missing_ok=True)
+    run(["git", "ls-remote", "--upload-pack=boundary-option:x", url], False)
+    assert marker.read_text() == "invoked"
+    marker.unlink()
+    run(["git", "config", "remote.origin.url", "--upload-pack=boundary-option:x"])
+    assert "option-like repository URL" in run(prepare, False)[1]
+    assert not marker.exists()
+    run(["git", "config", "remote.origin.url", url])
     env["PATH"] = saved_path
     planpath = next((repo / ".git/push-reviews/plans").glob("*.json"))
     plan = json.loads(planpath.read_text())
     assert plan["scan_base"] == baseline and plan["remote_main"] == baseline
     assert plan["head"] == head
     saved = planpath.read_bytes()
+    # Another clone advances main to an object absent from this checkout.
+    publisher = temp / "main-publisher"
+    run(["git", "clone", "--branch", "main", url, str(publisher)])
+    run(["git", "config", "user.name", "Boundary Publisher"], cwd=publisher)
+    run(["git", "config", "user.email", "test@example.invalid"], cwd=publisher)
+    run(
+        ["git", "commit", "--allow-empty", "-m", "test: remote main advance"],
+        cwd=publisher,
+    )
+    main_tip = run(["git", "rev-parse", "HEAD"], cwd=publisher)[0]
+    run(["git", "push", "origin", "main"], cwd=publisher)
+    run(["git", "cat-file", "-e", main_tip + "^{commit}"], False)
+    fetch_head = repo / ".git/FETCH_HEAD"
+    fetch_before = fetch_head.read_bytes() if fetch_head.exists() else None
+    run(prepare)
+    advanced = json.loads(planpath.read_text())
+    assert advanced["remote_main"] == main_tip and advanced["scan_base"] == baseline
+    assert run(["git", "rev-parse", "HEAD"])[0] == head
+    assert (fetch_head.read_bytes() if fetch_head.exists() else None) == fetch_before
+    run(["git", "cat-file", "-e", main_tip + "^{commit}"])
+    # Restore only the disposable remote fixture's original baseline/plan.
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
+    run(prepare)
+    assert planpath.read_bytes() == saved
     # Both URLs exist but preparation must stop before writing any new plan.
     remote2 = temp / "mirror.git"
     run(["git", "init", "--bare", str(remote2)])
@@ -280,6 +316,16 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         absent_tree.rename(old_tree)
     # Introduced then removed content leaves an empty endpoint diff but history.
     run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
+    newline_tree = temp / "linked\nworktree"
+    run(
+        ["git", "worktree", "add", "-b", "newline-feature", str(newline_tree), baseline]
+    )
+    run(
+        ["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=newline_tree
+    )
+    assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+    run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=newline_tree)
+    run(["./scripts/install-hooks"])
     # Avoid the project's intentionally absent checks for isolated fixture commits.
     run(["git", "config", "core.hooksPath", str(temp / "fixture-no-hooks")])
     (repo / "transient").write_text("fixture sensitive intermediate content")
