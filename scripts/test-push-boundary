@@ -52,9 +52,35 @@ for body, login, expected in (
     if actual["state"] != expected:
         raise AssertionError((expected, actual))
     count += 1
+for security_sha, resolved, expected in (
+    ("b" * 40, {}, "waiting"),
+    (head_fixture, {}, "completed"),
+    ("aaaaaaa", {"aaaaaaa": head_fixture}, "completed"),
+    ("bbbbbbb", {"bbbbbbb": "b" * 40}, "waiting"),
+):
+    body = (
+        summary_fixture.replace("`aaaaaaa`", "`" + head_fixture + "`")
+        + "\n| 🛡 **Security Review** | ✅ **Completed** | `"
+        + security_sha
+        + "` | Security |"
+    )
+    actual = status.completed_review(
+        [
+            {
+                "id": 2,
+                "updated_at": "2026-10-03T01:00:00Z",
+                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "body": body,
+            }
+        ],
+        head_fixture,
+        resolved,
+    )
+    assert actual["state"] == expected, (actual, expected)
+    count += 1
 with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     temp = Path(directory).resolve()
-    repo = temp / "repo"
+    repo = temp / "repo\n"
     repo.mkdir()
     env = os.environ.copy()
     # Git invokes hooks with repository variables; do not leak them into fixtures.
@@ -340,6 +366,22 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
         project_hook.unlink()
     project_dir.rmdir()
+    # Unexpected dormant shared hooks must not acquire authority on installation.
+    unexpected = hooks / "commit-msg"
+    unexpected.write_text("#!/bin/sh\nexit 37\n")
+    unexpected.chmod(0o755)
+    saved_hooks = {x.name: x.read_bytes() for x in hooks.iterdir() if x.is_file()}
+    run(["git", "config", "core.hooksPath", ".githooks"])
+    assert (
+        "unexpected executable shared hook"
+        in run(["./scripts/install-hooks"], False)[1]
+    )
+    assert run(["git", "config", "core.hooksPath"])[0] == ".githooks"
+    assert all(
+        (hooks / name).read_bytes() == data for name, data in saved_hooks.items()
+    )
+    unexpected.unlink()
+    run(["git", "config", "core.hooksPath", str(hooks)])
     # A shared-directory symlink must not redirect installation or future hooks.
     hooks_backup = temp / "hooks-backup"
     hooks.rename(hooks_backup)
@@ -431,7 +473,7 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     include_file = temp / "conditional-hooks"
     include_file.write_text("[core]\n hooksPath = " + str(custom) + "\n")
     old_gitdir = run(["git", "rev-parse", "--absolute-git-dir"], cwd=old_tree)[0]
-    include_key = "includeIf.gitdir:" + old_gitdir + ".path"
+    include_key = "includeIf.gitdir:**/worktrees/" + Path(old_gitdir).name + ".path"
     run(["git", "config", include_key, str(include_file)])
     assert "effective worktree hooksPath" in run(["./scripts/install-hooks"], False)[1]
     include_file.write_text("[core]\n hooksPath = .githooks\n")

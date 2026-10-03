@@ -107,3 +107,9 @@ worktree 목록은 `--porcelain -z`와 NUL-safe reader로 읽어 줄바꿈이 �
 설치 전에 모든 등록 checkout의 실행 가능한 .githooks 파일을 검사한다. pre-commit은 dispatch하고 기존의 정확한 managed pre-push만 공유 gate로 교체한다. post-code는 Git 이벤트가 아닌 명시적 편집 작업이다. commit-msg 등 추가 훅과 커스텀 pre-push는 임의로 비활성화하지 않고 설치를 차단하여 수동 조정을 요구한다.
 
 경로를 담은 Git 출력은 bytes로 읽고 newline 변환 없이 decode한다. CR과 LF 경로를 구분하며 커밋된 .gitmodules는 regular blob 모드만 허용한다. symlink와 다른 tree entry는 파싱 전에 차단한다.
+
+독립 리뷰의 reviewer와 summary는 공백을 제외한 내용이 있는 문자열만 인정한다. 지정한 security plugin 경로는 절대 경로여야 하며 canonical 경로로 확인한다. 공유 설치 대상에 관리하는 세 이름 외 실행 파일이 있으면 활성화하거나 삭제하지 않고 설치를 차단한다.
+
+PR 요약에 포함된 Code Review와 Security Review는 모두 완료되어야 하며 각각의 커밋 ID를 전체 SHA로 해석하여 최신 head와 비교한다. 다른 커밋을 검토한 완료 row는 현재 작업의 완료 증거가 아니다.
+
+POSIX wrapper는 sentinel로 Git 경로 출력의 마지막 LF 하나만 제거하여 checkout 이름 끝의 줄바꿈을 보존한다. Python pre-commit도 bytes 경로를 같은 규칙으로 읽는다.

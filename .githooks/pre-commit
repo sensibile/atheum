@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 os.environ["GIT_OPTIONAL_LOCKS"] = "0"
-root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+root = Path(os.fsdecode(subprocess.check_output(["git", "rev-parse", "--show-toplevel"]).removesuffix(b"\n")))
 os.chdir(root)
 if subprocess.run(["git", "diff", "--quiet"]).returncode:
     print("pre-commit: partial staging/unstaged changes to tracked files are rejected", file=sys.stderr)

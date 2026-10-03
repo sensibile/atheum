@@ -49,9 +49,12 @@ def plugin():
         result = subprocess.run(
             ["git", "config", "--get", "codex.securityPluginDir"],
             capture_output=True,
-            text=True,
         )
-        configured = result.stdout.strip()
+        require(
+            result.returncode in (0, 1),
+            "security plugin configuration cannot be inspected",
+        )
+        configured = os.fsdecode(result.stdout.removesuffix(b"\n"))
     if configured:
         candidates = [Path(configured).expanduser()]
     else:
@@ -68,7 +71,10 @@ def plugin():
         bool(candidates),
         "Codex Security validator unavailable; set codex.securityPluginDir",
     )
-    validator = candidates[0] / "scripts/validate_scan_contract.py"
+    directory = candidates[0]
+    require(directory.is_absolute(), "security plugin directory must be absolute")
+    directory = directory.resolve(strict=True)
+    validator = directory / "scripts/validate_scan_contract.py"
     require(validator.is_file(), "Codex Security validator missing")
     return validator
 
@@ -82,8 +88,10 @@ def agent_review(path, plan):
         and data.get("blocking_findings") == []
         and data.get("reviewed_base") == plan["scan_base"]
         and data.get("reviewed_head") == plan["head"]
-        and bool(data.get("reviewer"))
-        and bool(data.get("summary")),
+        and all(
+            isinstance(data.get(field), str) and data[field].strip()
+            for field in ("reviewer", "summary")
+        ),
         "independent review missing, failed or out of range",
     )
 

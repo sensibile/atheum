@@ -1,8 +1,15 @@
 #!/bin/sh
 set -eu
-cd "$(git rev-parse --show-toplevel)"
-common=$(git rev-parse --git-common-dir)
-common=$(cd "$common" && pwd -P)
+# Keep checkout path newlines; remove only Git's output delimiter.
+checkout=$(git rev-parse --show-toplevel && printf .)
+checkout=${checkout%.}
+cd "${checkout%?}"
+common=$(git rev-parse --git-common-dir && printf .)
+common=${common%.}
+common=${common%?}
+common=$(cd "$common" && pwd -P && printf .)
+common=${common%.}
+common=${common%?}
 hooks="$common/codex-hooks"
 existing=$(git config --get core.hooksPath || true)
 if [ -n "$existing" ] && [ "$existing" != .githooks ] && [ "$existing" != "$hooks" ]; then
@@ -45,7 +52,7 @@ for record in records.split(b"\0"):
     # Preserve executable project hooks before replacing their active directory.
     # pre-commit is dispatched; only the exact legacy managed pre-push is replaced.
     # post-code is an explicit editor/agent action, not a Git hook.
-    legacy_push = b'#!/bin/sh\nset -eu\ncd "$(git rev-parse --show-toplevel)"\nexec ./scripts/review-gate push "$@"\n'
+    legacy_push = (b'#!/bin/sh\nset -eu\ncd "$(git rev-parse --show-toplevel)"\nexec ./scripts/review-gate push "$@"\n', b'#!/bin/sh\nset -eu\n# Keep checkout path newlines; remove only Git\'s output delimiter.\ncheckout=$(git rev-parse --show-toplevel && printf .)\ncheckout=${checkout%.}\ncd "${checkout%?}"\nexec ./scripts/review-gate push "$@"\n')
     project_hooks = os.path.join(path, ".githooks")
     if os.path.isdir(project_hooks):
         for name in os.listdir(project_hooks):
@@ -56,7 +63,7 @@ for record in records.split(b"\0"):
                 continue
             if name == "pre-push":
                 with open(hook, "rb") as stream:
-                    if stream.read() == legacy_push:
+                    if stream.read() in legacy_push:
                         continue
             sys.exit("BLOCKED: active project hook would be disabled; preserve it and reconcile manually")
     # Current effective values cannot expose hooks hidden in dormant conditions.
@@ -113,6 +120,14 @@ if [ -L "$hooks" ]; then
   echo 'BLOCKED: shared hook directory is a symlink; reconcile manually' >&2
   exit 1
 fi
+# Dormant files must not acquire hook authority when this directory is activated.
+for hook in "$hooks"/*; do
+  case "${hook##*/}" in review-gate|pre-push|pre-commit) continue ;; esac
+  if [ -f "$hook" ] && [ -x "$hook" ]; then
+    echo 'BLOCKED: unexpected executable shared hook exists; preserve it and reconcile manually' >&2
+    exit 1
+  fi
+done
 mkdir -p "$hooks"
 for name in review-gate pre-push pre-commit; do
   if [ -d "$hooks/$name" ]; then
@@ -127,13 +142,19 @@ cat > "$pending/pre-push" <<'HOOK'
 #!/bin/sh
 set -eu
 runner=$(cd "$(dirname "$0")" && pwd -P)/review-gate
-cd "$(git rev-parse --show-toplevel)"
+# Keep checkout path newlines; remove only Git's output delimiter.
+checkout=$(git rev-parse --show-toplevel && printf .)
+checkout=${checkout%.}
+cd "${checkout%?}"
 exec "$runner" push "$@"
 HOOK
 cat > "$pending/pre-commit" <<'HOOK'
 #!/bin/sh
 set -eu
-cd "$(git rev-parse --show-toplevel)"
+# Keep checkout path newlines; remove only Git's output delimiter.
+checkout=$(git rev-parse --show-toplevel && printf .)
+checkout=${checkout%.}
+cd "${checkout%?}"
 [ -x ./.githooks/pre-commit ] || {
   echo 'BLOCKED: this worktree lacks its project pre-commit checks' >&2
   exit 1

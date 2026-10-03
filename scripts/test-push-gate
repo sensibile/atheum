@@ -120,13 +120,14 @@ for control in ("\r", "\n", "\t"):
 count = 0
 with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     temp = Path(tmp).resolve()
-    repo = temp / "repo"
+    repo = temp / "repo\n"
     repo.mkdir()
     env = os.environ.copy()
     for key in subprocess.check_output(
         ["git", "rev-parse", "--local-env-vars"], text=True
     ).splitlines():
         env.pop(key, None)
+    env.pop("CODEX_SECURITY_PLUGIN_DIR", None)
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
 
     def run(args, success=True, stdin=None, cwd=repo):
@@ -219,6 +220,36 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     record = ["./scripts/review-gate", "record", str(planpath), str(scan), str(agent)]
     seal()
     run(record)
+    # Both attestation fields must contain real text, not arbitrary truthy JSON.
+    before_attestation = (repo / folder / (gate.identity(plan) + ".json")).read_bytes()
+    for field in ("reviewer", "summary"):
+        for value in (
+            " \t\n",
+            {"text": "truthy object"},
+            ["truthy list"],
+            7,
+            True,
+            None,
+            "",
+        ):
+            agent.write_text(json.dumps({**agentdata, field: value}))
+            run(record, False)
+            assert (
+                repo / folder / (gate.identity(plan) + ".json")
+            ).read_bytes() == before_attestation
+    agent.write_text(json.dumps(agentdata))
+    # Relative installation paths must not select different worktree validators.
+    run(["git", "config", "codex.securityPluginDir", "."])
+    run(record, False)
+    run(["git", "config", "codex.securityPluginDir", str(plugin)])
+    env["CODEX_SECURITY_PLUGIN_DIR"] = "."
+    run(record, False)
+    env.pop("CODEX_SECURITY_PLUGIN_DIR")
+    canonical_alias = temp / "plugin-alias"
+    canonical_alias.symlink_to(plugin, target_is_directory=True)
+    run(["git", "config", "codex.securityPluginDir", str(canonical_alias)])
+    run(record)
+    run(["git", "config", "codex.securityPluginDir", str(plugin)])
     # A forged baseline must fail registration and actual pre-push, even with
     # otherwise valid sealed scan and independent-review artifacts.
     original_plan = planpath.read_text()

@@ -42,7 +42,7 @@ def completed_review(comments, head, resolved_oids=None):
             )
     code = [r for r in rows if r["code"]]
     done = bool(code) and all(r["head_matches"] and r["completed"] for r in code)
-    done = done and all(r["completed"] for r in rows)
+    done = done and all(r["head_matches"] and r["completed"] for r in rows)
     return {
         "state": "completed" if done else "waiting",
         "summary_id": summary["id"],
@@ -133,7 +133,9 @@ def main():
         latest = max(summaries, key=lambda c: c["updated_at"])
         for line in latest["body"].splitlines():
             cells = [cell.strip() for cell in line.strip().split("|")]
-            if len(cells) >= 5 and "**Code Review**" in cells[1]:
+            if len(cells) >= 5 and re.search(
+                r"\*\*(?:Code|Security) Review\*\*", cells[1]
+            ):
                 match = re.search(r"`([0-9a-f]{7,64})`", cells[3])
                 if match:
                     abbreviations.add(match.group(1))
