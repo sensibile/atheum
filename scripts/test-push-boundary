@@ -322,6 +322,24 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     assert (hooks / "review-gate").stat().st_ino != old_inode
     assert (hooks / "review-gate").read_bytes() == old_content
     assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+    # Additional active hooks in another registered checkout must be preserved.
+    project_dir = old_tree / ".githooks"
+    project_dir.mkdir()
+    for name, content in (
+        ("commit-msg", "#!/bin/sh\nexit 23\n"),
+        ("prepare-commit-msg", "#!/bin/sh\nexit 24\n"),
+        ("pre-push", "#!/bin/sh\necho project check >&2\nexit 25\n"),
+    ):
+        project_hook = project_dir / name
+        project_hook.write_text(content)
+        project_hook.chmod(0o755)
+        before = {x.name: x.read_bytes() for x in hooks.iterdir() if x.is_file()}
+        assert "active project hook" in run(["./scripts/install-hooks"], False)[1]
+        assert project_hook.read_text() == content
+        assert all((hooks / name).read_bytes() == data for name, data in before.items())
+        assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+        project_hook.unlink()
+    project_dir.rmdir()
     # A shared-directory symlink must not redirect installation or future hooks.
     hooks_backup = temp / "hooks-backup"
     hooks.rename(hooks_backup)

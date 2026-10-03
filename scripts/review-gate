@@ -9,10 +9,11 @@ import re
 import subprocess
 import sys
 from urllib.parse import unquote, urlsplit
+from typing import NamedTuple
 
 
 def git(*args):
-    return subprocess.check_output(["git", *args], text=True).strip()
+    return os.fsdecode(subprocess.check_output(["git", *args])).removesuffix("\n")
 
 
 def digest(path):
@@ -140,17 +141,28 @@ def gitlinks(revision):
     return result
 
 
+def endpoint_errors(plan, commits, parents):
+    """Pure endpoint policy over explicit, immutable Git observations."""
+    errors = []
+    if commits != (plan["head"],):
+        errors.append(
+            "endpoint reviews require exactly one new commit; prepare each commit separately"
+        )
+    if parents != (plan["scan_base"],):
+        errors.append("endpoint reviews require a linear single-commit update")
+    return tuple(errors)
+
+
+def endpoint_snapshot(plan):
+    return (
+        tuple(git("rev-list", plan["scan_base"] + ".." + plan["head"]).splitlines()),
+        tuple(git("show", "-s", "--format=%P", plan["head"]).split()),
+    )
+
+
 def endpoint_range(plan):
-    # Endpoint scans cannot account for content introduced then removed in history.
-    commits = git("rev-list", plan["scan_base"] + ".." + plan["head"]).splitlines()
-    require(
-        len(commits) == 1 and commits[0] == plan["head"],
-        "endpoint reviews require exactly one new commit; prepare each commit separately",
-    )
-    require(
-        git("show", "-s", "--format=%P", plan["head"]) == plan["scan_base"],
-        "endpoint reviews require a linear single-commit update",
-    )
+    errors = endpoint_errors(plan, *endpoint_snapshot(plan))
+    require(not errors, "; ".join(errors))
 
 
 def security_review(directory, plan):
@@ -311,6 +323,14 @@ def push_destination(remote, url):
 
 
 def submodule_url(revision, path):
+    entry = git("ls-tree", "-z", revision, "--", ".gitmodules").split("\0")
+    require(
+        len(entry) == 2
+        and entry[1] == ""
+        and entry[0].split("\t", 1)[0].split()[:2]
+        in (["100644", "blob"], ["100755", "blob"]),
+        "committed .gitmodules must be a regular blob",
+    )
     result = subprocess.run(
         [
             "git",
@@ -322,12 +342,11 @@ def submodule_url(revision, path):
             r"^submodule\..*\.path$",
         ],
         capture_output=True,
-        text=True,
     )
     require(result.returncode == 0, "submodule path missing from committed .gitmodules")
     keys = [
         record.split("\n", 1)[0]
-        for record in result.stdout.split("\0")
+        for record in os.fsdecode(result.stdout).split("\0")
         if "\n" in record and record.split("\n", 1)[1] == path
     ]
     require(len(keys) == 1, "submodule path must have one committed URL")
@@ -439,38 +458,91 @@ def advertised_refs(url, ref):
     )
 
 
-def validate_plan(plan):
-    ordinary_objects()
-    require(plan.get("version") == 2, "unsupported push plan")
-    require(
-        plan["ref"].startswith("refs/heads/") and plan["ref"] != "refs/heads/main",
-        "use a feature branch and PR",
-    )
-    safe_push_url(plan["url"])
-    revision(plan["head"])
-    revision(plan["scan_base"])
-    if set(plan["remote_old"]) != {"0"}:
-        require(
-            plan["scan_base"] == plan["remote_old"], "existing branch base mismatch"
-        )
-        revision(plan["remote_old"])
-    else:
-        refs = advertised_refs(plan["url"], plan["ref"])
-        require(
-            refs.get(plan["ref"], "0" * len(plan["head"])) == plan["remote_old"],
-            "destination branch changed; prepare and review again",
-        )
-        require(
-            refs.get("refs/heads/main") == plan["remote_main"],
-            "remote main baseline changed or forged; prepare and review again",
-        )
-        revision(plan["remote_main"])
-        require(
-            git("merge-base", plan["remote_main"], plan["head"]) == plan["scan_base"],
-            "new branch baseline mismatch",
-        )
+class PlanSnapshot(NamedTuple):
+    resolved_commits: tuple
+    advertised_refs: tuple
+    merge_base: str
+    commits: tuple
+    parents: tuple
 
-    endpoint_range(plan)
+
+def plan_shape_errors(plan):
+    """Pure admission checks before shell code uses values as Git arguments."""
+    errors = []
+    if plan.get("version") != 2:
+        errors.append("unsupported push plan")
+    ref = plan.get("ref", "")
+    if (
+        not isinstance(ref, str)
+        or not ref.startswith("refs/heads/")
+        or ref == "refs/heads/main"
+    ):
+        errors.append("use a feature branch and PR")
+    names = ["head", "scan_base", "remote_old"]
+    if isinstance(plan.get("remote_old"), str) and set(plan["remote_old"]) == {"0"}:
+        names.append("remote_main")
+    for name in names:
+        value = plan.get(name)
+        if not isinstance(value, str) or not re.fullmatch(
+            r"[0-9a-f]{40}|[0-9a-f]{64}", value
+        ):
+            errors.append("full SHA required")
+    return tuple(errors)
+
+
+def plan_policy_errors(plan, snapshot):
+    """Pure policy: no Git, filesystem, environment or network access."""
+    errors = list(plan_shape_errors(plan))
+    if errors:
+        return tuple(errors)
+    required = (
+        plan["head"],
+        plan["scan_base"],
+        plan["remote_main"] if set(plan["remote_old"]) == {"0"} else plan["remote_old"],
+    )
+    if snapshot.resolved_commits != tuple((sha, sha) for sha in required):
+        errors.append("not a commit")
+    if set(plan["remote_old"]) != {"0"}:
+        if plan["scan_base"] != plan["remote_old"]:
+            errors.append("existing branch base mismatch")
+    else:
+        refs = dict(snapshot.advertised_refs)
+        if refs.get(plan["ref"], "0" * len(plan["head"])) != plan["remote_old"]:
+            errors.append("destination branch changed; prepare and review again")
+        if refs.get("refs/heads/main") != plan["remote_main"]:
+            errors.append(
+                "remote main baseline changed or forged; prepare and review again"
+            )
+        if snapshot.merge_base != plan["scan_base"]:
+            errors.append("new branch baseline mismatch")
+    errors.extend(endpoint_errors(plan, snapshot.commits, snapshot.parents))
+    return tuple(errors)
+
+
+def collect_plan_snapshot(plan):
+    """Shell: observe repository/transport state once for explicit core inputs."""
+    names = ("head", "scan_base", "remote_old")
+    refs, merge_base = (), ""
+    if set(plan["remote_old"]) == {"0"}:
+        names = ("head", "scan_base", "remote_main")
+        refs = tuple(advertised_refs(plan["url"], plan["ref"]).items())
+        merge_base = git("merge-base", plan["remote_main"], plan["head"])
+    resolved = tuple(
+        (plan[name], git("rev-parse", "--verify", plan[name] + "^{commit}"))
+        for name in names
+    )
+    commits, parents = endpoint_snapshot(plan)
+    return PlanSnapshot(resolved, refs, merge_base, commits, parents)
+
+
+def validate_plan(plan):
+    errors = plan_shape_errors(plan)
+    require(not errors, "; ".join(errors))
+    ordinary_objects()
+    safe_push_url(plan["url"])
+    snapshot = collect_plan_snapshot(plan)
+    errors = plan_policy_errors(plan, snapshot)
+    require(not errors, "; ".join(errors))
 
 
 def check_record(record, delivered=False):

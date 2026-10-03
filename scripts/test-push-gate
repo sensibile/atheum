@@ -25,6 +25,49 @@ spec = importlib.util.spec_from_loader(
 )
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
+# Policy is deterministic over immutable supplied observations, with no repository.
+base_sha, head_sha, other_sha = "a" * 40, "b" * 40, "c" * 40
+core_plan = {
+    "version": 2,
+    "ref": "refs/heads/feature",
+    "scan_base": base_sha,
+    "head": head_sha,
+    "remote_old": base_sha,
+}
+core_snapshot = gate.PlanSnapshot(
+    ((head_sha, head_sha), (base_sha, base_sha), (base_sha, base_sha)),
+    (),
+    "",
+    (head_sha,),
+    (base_sha,),
+)
+assert gate.plan_policy_errors(core_plan, core_snapshot) == ()
+assert "not a commit" in gate.plan_policy_errors(
+    core_plan, core_snapshot._replace(resolved_commits=())
+)
+assert "existing branch base mismatch" in gate.plan_policy_errors(
+    {**core_plan, "remote_old": other_sha}, core_snapshot
+)
+for snapshot in (
+    core_snapshot._replace(commits=()),
+    core_snapshot._replace(commits=(other_sha, head_sha)),
+    core_snapshot._replace(parents=(base_sha, other_sha)),
+):
+    assert gate.plan_policy_errors(core_plan, snapshot)
+new_plan = {**core_plan, "remote_old": "0" * 40, "remote_main": base_sha}
+new_snapshot = core_snapshot._replace(
+    advertised_refs=(("refs/heads/main", base_sha),), merge_base=base_sha
+)
+assert gate.plan_policy_errors(new_plan, new_snapshot) == ()
+for snapshot in (
+    new_snapshot._replace(advertised_refs=(("refs/heads/main", other_sha),)),
+    new_snapshot._replace(
+        advertised_refs=(("refs/heads/main", base_sha), (new_plan["ref"], other_sha))
+    ),
+    new_snapshot._replace(merge_base=other_sha),
+):
+    assert gate.plan_policy_errors(new_plan, snapshot)
+assert gate.plan_policy_errors(core_plan, core_snapshot) == ()
 plugin = gate.plugin().parent.parent
 example = plugin / "examples/completed-scan"
 for left, right in (
@@ -449,6 +492,69 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     finally:
         os.chdir(previous_cwd)
     count += 1
+    # A CR gitlink must not be matched to a distinct LF .gitmodules path.
+    run(["git", "update-index", "--force-remove", "child\npath"], cwd=newline_parent)
+    run(
+        [
+            "git",
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "160000," + head + ",child\rpath",
+        ],
+        cwd=newline_parent,
+    )
+    run(["git", "commit", "-m", "test: mismatched CR gitlink"], cwd=newline_parent)
+    cr_head = run(["git", "rev-parse", "HEAD"], cwd=newline_parent)
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(newline_parent)
+        assert "child\rpath" in gate.gitlinks(cr_head)
+        assert "child\npath" not in gate.gitlinks(cr_head)
+        try:
+            gate.submodule_url(cr_head, "child\rpath")
+            raise AssertionError("distinct CR/LF paths matched")
+        except ValueError as error:
+            assert "one committed URL" in str(error)
+    finally:
+        os.chdir(previous_cwd)
+    # Handcrafted symlink blob contents must be rejected before config parsing.
+    tree_sha = run(["git", "write-tree"], cwd=newline_parent)
+    raw_tree = subprocess.check_output(
+        ["git", "cat-file", "tree", tree_sha], cwd=newline_parent, env=env
+    )
+    assert raw_tree.count(b"100644 .gitmodules\0") == 1
+    crafted_tree = temp / "symlink-tree-object"
+    crafted_tree.write_bytes(
+        raw_tree.replace(b"100644 .gitmodules\0", b"120000 .gitmodules\0", 1)
+    )
+    symlink_tree = run(
+        ["git", "hash-object", "--literally", "-t", "tree", "-w", str(crafted_tree)],
+        cwd=newline_parent,
+    )
+    symlink_head = run(
+        [
+            "git",
+            "commit-tree",
+            symlink_tree,
+            "-p",
+            cr_head,
+            "-m",
+            "test: symlink gitmodules",
+        ],
+        cwd=newline_parent,
+    )
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(newline_parent)
+        try:
+            gate.submodule_url(symlink_head, "child\npath")
+            raise AssertionError("symlink gitmodules accepted")
+        except ValueError as error:
+            assert "regular blob" in str(error)
+    finally:
+        os.chdir(previous_cwd)
+    run(["git", "reset", "--hard", newline_head], cwd=newline_parent)
     # Quoted trailing whitespace denotes a distinct actual consumer repository.
     spaced_remote = temp / "child-space.git "
     run(["git", "clone", "--bare", str(remote), str(spaced_remote)])

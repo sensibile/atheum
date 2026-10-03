@@ -42,6 +42,23 @@ for record in records.split(b"\0"):
     actual = os.path.realpath(os.fsdecode(available.stdout.removesuffix(b"\n")))
     if actual != common:
         sys.exit("BLOCKED: registered worktree belongs to a different repository")
+    # Preserve executable project hooks before replacing their active directory.
+    # pre-commit is dispatched; only the exact legacy managed pre-push is replaced.
+    # post-code is an explicit editor/agent action, not a Git hook.
+    legacy_push = b'#!/bin/sh\nset -eu\ncd "$(git rev-parse --show-toplevel)"\nexec ./scripts/review-gate push "$@"\n'
+    project_hooks = os.path.join(path, ".githooks")
+    if os.path.isdir(project_hooks):
+        for name in os.listdir(project_hooks):
+            hook = os.path.join(project_hooks, name)
+            if not os.path.isfile(hook) or not os.access(hook, os.X_OK):
+                continue
+            if name in ("pre-commit", "post-code"):
+                continue
+            if name == "pre-push":
+                with open(hook, "rb") as stream:
+                    if stream.read() == legacy_push:
+                        continue
+            sys.exit("BLOCKED: active project hook would be disabled; preserve it and reconcile manually")
     # Current effective values cannot expose hooks hidden in dormant conditions.
     # Conservatively reject conditional includes, even when presently inactive.
     conditional = subprocess.run(
