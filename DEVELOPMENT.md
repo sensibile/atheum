@@ -89,3 +89,7 @@ push 성공은 PR 피드백 처리 완료가 아니다. 최신 head에서 봇 �
 worktree 목록은 `--porcelain -z`와 NUL-safe reader로 읽어 줄바꿈이 있는 경로도 검사한다. 새 브랜치 준비 시 advertised main 객체가 없으면 local ref/FETCH_HEAD를 갱신하지 않고 해당 SHA만 fetch한 뒤 baseline을 검증한다. pre-commit 경계 테스트는 모듈 로드 전 bytecode 쓰기를 끈다.
 
 `-`로 시작하는 repository URL은 Git 옵션으로 해석되지 않도록 모든 목적지 검증에서 거부하며, ls-remote/fetch에도 옵션 종료자 `--`를 사용한다.
+
+추가 경계: 훅 설치는 등록된 checkout의 실제 common Git 디렉터리를 비교하고, hooksPath가 없을 때 활성 기본 훅을 보존하기 위해 설치를 거부한다. 로컬 push URL은 심볼릭 링크 경유를 거부하며 canonical 경로를 사용해야 한다. PR 상태 조회는 마지막 API 조회 뒤 스레드를 다시 페이지 조회하지만 원자적 스냅샷은 아니며 실제 merge 시점의 GitHub 보호 규칙이 최종 gate다.
+
+조건부 include를 포함한 모든 checkout의 hooksPath 출처를 검사한다. 선언된 저장소와 다른 위치로 확장하는 URL rewrite는 거부한다. 봇 요약의 짧은 커밋 ID는 GitHub commit API의 전체 SHA로 확인하며 모호하거나 조회할 수 없는 ID는 완료로 인정하지 않는다.

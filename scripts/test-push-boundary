@@ -47,6 +47,7 @@ for body, login, expected in (
             }
         ],
         head_fixture,
+        {"aaaaaaa": head_fixture},
     )
     if actual["state"] != expected:
         raise AssertionError((expected, actual))
@@ -225,6 +226,26 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/feature", head])
     assert "destination branch changed" in run(args, False)[1]
     run(["git", "--git-dir", str(remote), "update-ref", "-d", "refs/heads/feature"])
+    rewrite_from = "https://consumer.invalid/repository.git"
+    rewrite_key = "url." + str(remote) + ".insteadOf"
+    run(["git", "config", rewrite_key, rewrite_from])
+    run(["git", "config", "remote.origin.url", rewrite_from])
+    forgedpath.write_text(json.dumps({**plan, "url": rewrite_from}))
+    rewrite_args = [*args]
+    rewrite_args[2] = str(forgedpath)
+    assert "URL rewrite changes" in run(rewrite_args, False)[1]
+    run(["git", "config", "--unset", rewrite_key])
+    run(["git", "config", "remote.origin.url", url])
+    # Local destination aliases may be retargeted without changing URL text.
+    alias = temp / "destination-alias"
+    alias.symlink_to(remote, target_is_directory=True)
+    for alias_url in (str(alias), "file://" + str(alias)):
+        run(["git", "config", "remote.origin.url", alias_url])
+        assert "symlinked local repository URL" in run(prepare, False)[1]
+    alias.unlink()
+    alias.symlink_to(remote2, target_is_directory=True)
+    assert "symlinked local repository URL" in run(prepare, False)[1]
+    run(["git", "config", "remote.origin.url", url])
     # Preserve unrelated existing hook configurations and their files.
     custom = temp / "custom-hooks"
     custom.mkdir()
@@ -234,6 +255,14 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["./scripts/install-hooks"], False)
     assert marker.read_text() == "preserve custom hook"
     assert run(["git", "config", "core.hooksPath"])[0] == str(custom)
+    run(["git", "config", "--unset", "core.hooksPath"])
+    default_hook = repo / ".git/hooks/pre-commit"
+    default_hook.write_text("#!/bin/sh\nexit 0\n")
+    default_hook.chmod(0o755)
+    assert "active default hook" in run(["./scripts/install-hooks"], False)[1]
+    assert default_hook.read_text() == "#!/bin/sh\nexit 0\n"
+    assert run(["git", "config", "--get", "core.hooksPath"], False)[0] == ""
+    default_hook.unlink()
     run(["git", "config", "core.hooksPath", ".githooks"])
     run(["./scripts/install-hooks"])
     hooks = Path(run(["git", "config", "core.hooksPath"])[0])
@@ -311,9 +340,29 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
         run(["git", "config", "--unset", "extensions.worktreeConfig"])
         assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        old_tree.mkdir()
+        run(["git", "init"], cwd=old_tree)
+        for spelling in ("true", "false"):
+            run(["git", "config", "extensions.worktreeConfig", spelling])
+            assert "different repository" in run(["./scripts/install-hooks"], False)[1]
+        import shutil
+
+        shutil.rmtree(old_tree)
         run(["git", "config", "extensions.worktreeConfig", "true"])
     finally:
         absent_tree.rename(old_tree)
+    # Conditional includes can override hooks without worktreeConfig.
+    run(["git", "config", "--unset", "extensions.worktreeConfig"])
+    include_file = temp / "conditional-hooks"
+    include_file.write_text("[core]\n hooksPath = " + str(custom) + "\n")
+    old_gitdir = run(["git", "rev-parse", "--absolute-git-dir"], cwd=old_tree)[0]
+    include_key = "includeIf.gitdir:" + old_gitdir + ".path"
+    run(["git", "config", include_key, str(include_file)])
+    assert "effective worktree hooksPath" in run(["./scripts/install-hooks"], False)[1]
+    include_file.write_text("[core]\n hooksPath = .githooks\n")
+    assert "effective worktree hooksPath" in run(["./scripts/install-hooks"], False)[1]
+    run(["git", "config", "--unset", include_key])
+    run(["git", "config", "extensions.worktreeConfig", "true"])
     # Introduced then removed content leaves an empty endpoint diff but history.
     run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
     newline_tree = temp / "linked\nworktree"
@@ -417,7 +466,9 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     ):
         (cli / "counter").unlink(missing_ok=True)
         (cli / "responses").write_text(
-            json.dumps([metadata, graph, final_comments, final])
+            json.dumps(
+                [metadata, graph, final_comments, final, {"sha": head_fixture}, graph]
+            )
         )
         result = subprocess.run(
             [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
@@ -426,10 +477,48 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
             text=True,
         )
         assert result.returncode == expected, (result.stdout, result.stderr)
-        assert (cli / "counter").read_text() == "4"
+        assert (cli / "counter").read_text() == (
+            "4" if final["headRefOid"] != head_fixture else "6"
+        )
         if expected == 3:
             assert json.loads(result.stdout)["ready_at_observation"] is False
         count += 1
+    # Same-prefix distinct commit must not inherit an older completed review.
+    (cli / "counter").unlink()
+    (cli / "responses").write_text(
+        json.dumps(
+            [metadata, graph, comments, metadata, {"sha": "aaaaaaa" + "b" * 33}, graph]
+        )
+    )
+    result = subprocess.run(
+        [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
+        env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 3, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)["bot_review"]["state"] == "waiting"
+    count += 1
+    # A thread created during later reads is visible in the final pagination.
+    late_graph = json.loads(json.dumps(graph))
+    late_graph["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"] = [
+        {"id": "late-thread", "isResolved": False}
+    ]
+    (cli / "counter").unlink()
+    (cli / "responses").write_text(
+        json.dumps(
+            [metadata, graph, comments, metadata, {"sha": head_fixture}, late_graph]
+        )
+    )
+    result = subprocess.run(
+        [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
+        env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 3, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)["unresolved_threads"] == ["late-thread"]
+    count += 1
 print(
     "PASS:",
     count,

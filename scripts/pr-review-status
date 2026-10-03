@@ -11,7 +11,8 @@ def gh(*args):
     return json.loads(subprocess.check_output(["gh", *args], text=True))
 
 
-def completed_review(comments, head):
+def completed_review(comments, head, resolved_oids=None):
+    resolved_oids = resolved_oids or {}
     summaries = [
         c
         for c in comments
@@ -29,7 +30,13 @@ def completed_review(comments, head):
             rows.append(
                 {
                     "code": "**Code Review**" in cells[1],
-                    "head_matches": bool(match and head.startswith(match.group(1))),
+                    "head_matches": bool(
+                        match
+                        and (
+                            match.group(1) == head
+                            or resolved_oids.get(match.group(1)) == head
+                        )
+                    ),
                     "completed": "**Completed**" in cells[2],
                 }
             )
@@ -66,31 +73,36 @@ def main():
       repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid
         reviewThreads(first:100,after:$cursor){nodes{id isResolved}
           pageInfo{hasNextPage endCursor}}}}}"""
-    unresolved = []
-    cursor = None
-    while True:
-        args = [
-            "api",
-            "graphql",
-            "-f",
-            "query=" + query,
-            "-f",
-            "owner=" + owner,
-            "-f",
-            "name=" + name,
-            "-F",
-            "number=" + number,
-        ]
-        if cursor:
-            args += ["-f", "cursor=" + cursor]
-        data = gh(*args)["data"]["repository"]["pullRequest"]
-        if data["headRefOid"] != pr["headRefOid"]:
-            sys.exit("BLOCKED: PR head changed during observation; recheck")
-        threads = data["reviewThreads"]
-        unresolved += [t["id"] for t in threads["nodes"] if not t["isResolved"]]
-        if not threads["pageInfo"]["hasNextPage"]:
-            break
-        cursor = threads["pageInfo"]["endCursor"]
+
+    def read_threads():
+        unresolved = []
+        cursor = None
+        while True:
+            args = [
+                "api",
+                "graphql",
+                "-f",
+                "query=" + query,
+                "-f",
+                "owner=" + owner,
+                "-f",
+                "name=" + name,
+                "-F",
+                "number=" + number,
+            ]
+            if cursor:
+                args += ["-f", "cursor=" + cursor]
+            data = gh(*args)["data"]["repository"]["pullRequest"]
+            if data["headRefOid"] != pr["headRefOid"]:
+                sys.exit("BLOCKED: PR head changed during observation; recheck")
+            threads = data["reviewThreads"]
+            unresolved += [t["id"] for t in threads["nodes"] if not t["isResolved"]]
+            if not threads["pageInfo"]["hasNextPage"]:
+                break
+            cursor = threads["pageInfo"]["endCursor"]
+        return unresolved
+
+    unresolved = read_threads()
     # Read the latest mutable bot summary after thread pagination.
     pages = gh("api", f"repos/{repo}/issues/{number}/comments", "--paginate", "--slurp")
     comments = [comment for page in pages for comment in page]
@@ -106,7 +118,33 @@ def main():
     if final_pr["headRefOid"] != pr["headRefOid"]:
         sys.exit("BLOCKED: PR head changed during observation; recheck")
     pr = final_pr
-    bot = completed_review(comments, pr["headRefOid"])
+    # Refresh after the later reads to detect newly created unresolved threads.
+    # This is still a bounded observation; GitHub enforces merge-time rules.
+    # GitHub resolves abbreviated commit IDs and rejects ambiguous IDs. A prefix
+    # match alone cannot bind an old completed review to a new commit.
+    summaries = [
+        c
+        for c in comments
+        if c["user"]["login"] == "chatgpt-codex-connector[bot]"
+        and "<!-- codex-pull-request-review-summary -->" in c["body"]
+    ]
+    abbreviations = set()
+    if summaries:
+        latest = max(summaries, key=lambda c: c["updated_at"])
+        for line in latest["body"].splitlines():
+            cells = [cell.strip() for cell in line.strip().split("|")]
+            if len(cells) >= 5 and "**Code Review**" in cells[1]:
+                match = re.search(r"`([0-9a-f]{7,64})`", cells[3])
+                if match:
+                    abbreviations.add(match.group(1))
+    resolved_oids = {}
+    for abbreviation in abbreviations:
+        if len(abbreviation) < len(pr["headRefOid"]):
+            resolved_oids[abbreviation] = gh(
+                "api", f"repos/{repo}/commits/{abbreviation}"
+            )["sha"]
+    unresolved = read_threads()
+    bot = completed_review(comments, pr["headRefOid"], resolved_oids)
     changes_requested = pr["reviewDecision"] == "CHANGES_REQUESTED" or any(
         review["state"] == "CHANGES_REQUESTED" for review in pr["latestReviews"]
     )

@@ -377,6 +377,22 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
         run(["git", "config", configkey, "all"], cwd=parent)
         run(parent_record, False, cwd=parent)
         run(["git", "config", "--unset", configkey], cwd=parent)
+    # Consumer reachability cannot be redirected by the evidence checkout.
+    rewrite_key = "url." + str(mirror) + ".insteadOf"
+    run(["git", "config", rewrite_key, remote_url])
+    result = subprocess.run(
+        parent_record + [str(child_evidence)],
+        cwd=parent,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode != 0 and "URL rewrite changes" in result.stderr, (
+        result.stdout,
+        result.stderr,
+    )
+    count += 1
+    run(["git", "config", "--unset", rewrite_key])
     # A fork receipt cannot authorize a consumer URL where the SHA is absent.
     child_receipt = json.loads(receiptpath.read_text())
     original_child_receipt = receiptpath.read_bytes()

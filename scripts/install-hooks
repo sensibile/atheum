@@ -27,17 +27,38 @@ import subprocess
 import sys
 
 hooks, enabled = sys.argv[1:]
+common = os.path.realpath(os.path.dirname(hooks))
 records = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"])
 for record in records.split(b"\0"):
     if not record.startswith(b"worktree "):
         continue
     path = os.fsdecode(record[len(b"worktree "):])
     available = subprocess.run(
-        ["git", "-C", path, "rev-parse", "--git-common-dir"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ["git", "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
     if available.returncode:
         sys.exit("BLOCKED: registered worktree cannot be inspected")
+    actual = os.path.realpath(os.fsdecode(available.stdout.removesuffix(b"\n")))
+    if actual != common:
+        sys.exit("BLOCKED: registered worktree belongs to a different repository")
+    effective = subprocess.run(
+        ["git", "-C", path, "config", "--null", "--show-origin", "--get-all", "core.hooksPath"],
+        capture_output=True,
+    )
+    if effective.returncode not in (0, 1):
+        sys.exit("BLOCKED: effective hook configuration cannot be inspected")
+    fields = effective.stdout.split(b"\0")[:-1]
+    if len(fields) % 2:
+        sys.exit("BLOCKED: malformed effective hook configuration")
+    for origin, value in zip(fields[::2], fields[1::2]):
+        value = os.fsdecode(value)
+        source = os.fsdecode(origin)
+        shared = source.startswith("file:") and os.path.realpath(
+            os.path.join(path, source[5:])
+        ) == os.path.join(common, "config")
+        if value != hooks and not (shared and value == ".githooks"):
+            sys.exit("BLOCKED: effective worktree hooksPath override exists; reconcile manually")
     if enabled != "true":
         continue
     result = subprocess.run(
@@ -52,6 +73,15 @@ for record in records.split(b"\0"):
     elif result.returncode != 1:
         sys.exit("BLOCKED: worktree hook configuration cannot be inspected")
 PY
+if [ -z "$existing" ]; then
+  for hook in "$common"/hooks/*; do
+    case "$hook" in *.sample) continue ;; esac
+    if [ -f "$hook" ] && [ -x "$hook" ]; then
+      echo 'BLOCKED: active default hook exists; preserve it and reconcile manually' >&2
+      exit 1
+    fi
+  done
+fi
 mkdir -p "$hooks"
 for name in review-gate pre-push pre-commit; do
   if [ -d "$hooks/$name" ]; then

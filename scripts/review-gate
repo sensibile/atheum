@@ -241,6 +241,27 @@ def safe_push_url(url):
             Path(url).is_absolute() or re.fullmatch(r"(?:[^/@:]+@)?[^/:]+:.+", url),
             "relative local push URL is forbidden; use an absolute destination",
         )
+    local = None
+    if Path(url).is_absolute():
+        local = Path(url)
+    elif url.startswith("file:"):
+        local = Path(unquote(urlsplit(url).path))
+    if local is not None:
+        require(
+            os.path.abspath(local) == str(local.resolve()),
+            "symlinked local repository URL is forbidden; use its canonical path",
+        )
+    return url
+
+
+def expanded_destination(url):
+    safe_push_url(url)
+    expanded = git("ls-remote", "--get-url", "--", url)
+    safe_push_url(expanded)
+    require(
+        repository_location(expanded) == repository_location(url),
+        "URL rewrite changes the declared repository destination",
+    )
     return url
 
 
@@ -392,7 +413,7 @@ def submodule_reviews(plan, evidence):
 
 
 def advertised_refs(url, ref):
-    safe_push_url(url)
+    expanded_destination(url)
     return dict(
         line.split()[::-1]
         for line in git("ls-remote", "--", url, ref, "refs/heads/main").splitlines()
@@ -611,6 +632,7 @@ def main():
             repository_location(record["plan"]["url"]) == repository_location(consumer),
             "submodule receipt destination differs from committed consumer URL",
         )
+        expanded_destination(consumer)
         refs = dict(
             line.split()[::-1]
             for line in git(
