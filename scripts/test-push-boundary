@@ -93,6 +93,28 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     head = run(["git", "rev-parse", "HEAD"])[0]
     prepare = ["./scripts/prepare-push", "origin", "feature"]
     run(prepare)
+    # Harmless installed helper proves Git's execution path, then the gate must
+    # reject repository/remote URL selection before that helper can run.
+    helper_bin = temp / "helper-bin"
+    helper_bin.mkdir()
+    marker = helper_bin / "invoked"
+    helper = helper_bin / "git-remote-boundaryprobe"
+    helper.write_text(
+        '#!/usr/bin/env python3\nfrom pathlib import Path\nimport sys\nPath(__file__).with_name("invoked").write_text("invoked")\nsys.exit(1)\n'
+    )
+    helper.chmod(0o755)
+    saved_path = env["PATH"]
+    env["PATH"] = str(helper_bin) + os.pathsep + saved_path
+    run(["git", "config", "protocol.boundaryprobe.allow", "always"])
+    run(["git", "ls-remote", "boundaryprobe::payload"], False)
+    assert marker.read_text() == "invoked"
+    for unsafe in ("boundaryprobe::payload", "boundaryprobe://host/repo"):
+        marker.unlink(missing_ok=True)
+        run(["git", "remote", "set-url", "origin", unsafe])
+        run(prepare, False)
+        assert not marker.exists()
+    run(["git", "remote", "set-url", "origin", url])
+    env["PATH"] = saved_path
     planpath = next((repo / ".git/push-reviews/plans").glob("*.json"))
     plan = json.loads(planpath.read_text())
     assert plan["scan_base"] == baseline and plan["remote_main"] == baseline
@@ -215,6 +237,26 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     assert (hooks / "review-gate").stat().st_ino != old_inode
     assert (hooks / "review-gate").read_bytes() == old_content
     assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+    # A directory destination must fail before replacing any executable.
+    for name in ("review-gate", "pre-push", "pre-commit"):
+        destination = hooks / name
+        backup = temp / (name + "-backup")
+        destination.rename(backup)
+        destination.mkdir()
+        before = {
+            other.name: other.read_bytes()
+            for other in hooks.iterdir()
+            if other.is_file()
+        }
+        assert (
+            "destination is a directory" in run(["./scripts/install-hooks"], False)[1]
+        )
+        assert list(destination.iterdir()) == []
+        assert all(
+            (hooks / other).read_bytes() == content for other, content in before.items()
+        )
+        destination.rmdir()
+        backup.rename(destination)
     # Worktree-specific config must not silently override shared installation.
     run(["git", "config", "extensions.worktreeConfig", "true"])
     run(["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=old_tree)
@@ -225,6 +267,17 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         )
     run(["git", "config", "--worktree", "core.hooksPath", ""], cwd=old_tree)
     assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+    absent_tree = temp / "temporarily-offline-tree"
+    old_tree.rename(absent_tree)
+    try:
+        assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "extensions.worktreeConfig", "false"])
+        assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "--unset", "extensions.worktreeConfig"])
+        assert "cannot be inspected" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "extensions.worktreeConfig", "true"])
+    finally:
+        absent_tree.rename(old_tree)
     # Introduced then removed content leaves an empty endpoint diff but history.
     run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
     # Avoid the project's intentionally absent checks for isolated fixture commits.
@@ -264,6 +317,8 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         "state": "OPEN",
         "isDraft": False,
         "url": "https://example.invalid/pr/1",
+        "reviewDecision": "",
+        "latestReviews": [],
     }
     comments = [
         [
@@ -293,13 +348,31 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         '#!/usr/bin/env python3\nimport json\nfrom pathlib import Path\np=Path(__file__).parent\nc=p/"counter"\ni=int(c.read_text()) if c.exists() else 0\nc.write_text(str(i+1))\nprint(json.dumps(json.loads((p/"responses").read_text())[i]))\n'
     )
     runner.chmod(0o755)
-    for final, expected in (
-        (metadata, 0),
-        ({**metadata, "mergeStateStatus": "BLOCKED"}, 3),
-        ({**metadata, "headRefOid": "b" * 40}, 1),
+    for final, final_comments, expected in (
+        (metadata, comments, 0),
+        ({**metadata, "mergeStateStatus": "BLOCKED"}, comments, 3),
+        ({**metadata, "headRefOid": "b" * 40}, comments, 1),
+        ({**metadata, "reviewDecision": "CHANGES_REQUESTED"}, comments, 3),
+        ({**metadata, "latestReviews": [{"state": "CHANGES_REQUESTED"}]}, comments, 3),
+        (
+            metadata,
+            [
+                [
+                    {
+                        **comments[0][0],
+                        "body": summary_fixture.replace(
+                            "**Completed**", "**In progress**"
+                        ),
+                    }
+                ]
+            ],
+            3,
+        ),
     ):
         (cli / "counter").unlink(missing_ok=True)
-        (cli / "responses").write_text(json.dumps([metadata, comments, graph, final]))
+        (cli / "responses").write_text(
+            json.dumps([metadata, graph, final_comments, final])
+        )
         result = subprocess.run(
             [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
             env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
@@ -309,7 +382,7 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         assert result.returncode == expected, (result.stdout, result.stderr)
         assert (cli / "counter").read_text() == "4"
         if expected == 3:
-            assert json.loads(result.stdout)["mergeStateStatus"] == "BLOCKED"
+            assert json.loads(result.stdout)["ready_at_observation"] is False
         count += 1
 print(
     "PASS:",

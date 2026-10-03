@@ -53,6 +53,17 @@ assert gate.repository_location(
 assert gate.repository_location(
     "git@github.com:sensibile/acropolis.git"
 ) == gate.repository_location("https://github.com/sensibile/acropolis.git")
+for remote_url in (
+    "evil::payload",
+    "ext::payload",
+    "evil://host/repo",
+    "ftp://host/repo",
+):
+    try:
+        gate.safe_push_url(remote_url)
+        raise AssertionError("remote helper URL accepted")
+    except ValueError as error:
+        assert "remote-helper" in str(error) or "unsupported" in str(error)
 count = 0
 with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     temp = Path(tmp).resolve()
@@ -235,6 +246,10 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     bad = copy.deepcopy(coverage)
     bad["completeness"] = "partial"
     seal(c=bad)
+    run(record, False)
+    reported = copy.deepcopy(coverage)
+    reported["surfaces"][0]["disposition"] = "reported"
+    seal(c=reported)
     run(record, False)
     seal()
     bad = json.loads((scan / "scan-manifest.json").read_text())
@@ -542,11 +557,18 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     )
     tip = run(["git", "rev-parse", "HEAD"], cwd=outsider)
     run(["git", "push", "origin", "feature"], cwd=outsider)
+    run(
+        ["git", "commit", "--allow-empty", "-m", "test: unrelated descendant"],
+        cwd=outsider,
+    )
+    irrelevant_tip = run(["git", "rev-parse", "HEAD"], cwd=outsider)
+    run(["git", "push", "origin", "HEAD:refs/heads/unrelated"], cwd=outsider)
     run(["git", "cat-file", "-e", tip + "^{commit}"], False)
     branch_before = run(["git", "rev-parse", "HEAD"])
     run(chain_record, cwd=parent)
     assert run(["git", "rev-parse", "HEAD"]) == branch_before
     run(["git", "cat-file", "-e", tip + "^{commit}"])
+    run(["git", "cat-file", "-e", irrelevant_tip + "^{commit}"], False)
 print(
     "PASS:",
     count,

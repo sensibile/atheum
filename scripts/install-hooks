@@ -9,22 +9,50 @@ if [ -n "$existing" ] && [ "$existing" != .githooks ] && [ "$existing" != "$hook
   echo 'BLOCKED: existing hooksPath differs; preserve it and reconcile manually' >&2
   exit 1
 fi
-# Refuse worktree overrides that would silently bypass the shared gate.
-if [ "$(git config --type=bool --get extensions.worktreeConfig || true)" = true ]; then
-  git worktree list --porcelain | while IFS= read -r line; do
-    case "$line" in
-      'worktree '*)
-        path=${line#worktree }
+# Inspect every registered checkout; only query worktree-specific configuration
+# when Git enables it. Missing config is distinct from a failed config read.
+if worktree_config=$(git config --type=bool --get extensions.worktreeConfig); then
+  :
+else
+  result=$?
+  if [ "$result" -ne 1 ]; then
+    echo 'BLOCKED: worktree configuration cannot be inspected' >&2
+    exit 1
+  fi
+  worktree_config=false
+fi
+worktrees=$(git worktree list --porcelain)
+printf '%s\n' "$worktrees" | while IFS= read -r line; do
+  case "$line" in
+    'worktree '*)
+      path=${line#worktree }
+      if ! git -C "$path" rev-parse --git-common-dir >/dev/null 2>&1; then
+        echo 'BLOCKED: registered worktree cannot be inspected' >&2
+        exit 1
+      fi
+      if [ "$worktree_config" = true ]; then
         if override=$(git -C "$path" config --worktree --get core.hooksPath); then
           if [ "$override" != "$hooks" ]; then
-          echo 'BLOCKED: a worktree hooksPath override exists; reconcile manually' >&2
+            echo 'BLOCKED: a worktree hooksPath override exists; reconcile manually' >&2
             exit 1
           fi
-        fi ;;
-    esac
-  done
-fi
+        else
+          result=$?
+          if [ "$result" -ne 1 ]; then
+            echo 'BLOCKED: worktree hook configuration cannot be inspected' >&2
+            exit 1
+          fi
+        fi
+      fi ;;
+  esac
+done
 mkdir -p "$hooks"
+for name in review-gate pre-push pre-commit; do
+  if [ -d "$hooks/$name" ]; then
+    echo 'BLOCKED: installed hook destination is a directory; reconcile manually' >&2
+    exit 1
+  fi
+done
 pending=$(mktemp -d "$hooks/.install.XXXXXX")
 trap 'rm -rf "$pending"' EXIT HUP INT TERM
 cp ./scripts/review-gate "$pending/review-gate"

@@ -193,7 +193,8 @@ def security_review(directory, plan):
         and coverage["includePaths"] == ["."]
         and coverage["mode"] in ("diff", "commit", "branch_diff")
         and not any(
-            s["disposition"] == "needs_follow_up" for s in coverage["surfaces"]
+            s["disposition"] in ("needs_follow_up", "reported")
+            for s in coverage["surfaces"]
         ),
         "incomplete or narrowed security coverage",
     )
@@ -205,9 +206,16 @@ def security_review(directory, plan):
 
 
 def safe_push_url(url):
+    # Repository-controlled URLs must not select arbitrary Git remote helpers.
+    if not Path(url).is_absolute():
+        require(not re.match(r"^[^/:]+::", url), "remote-helper URL is forbidden")
     # Credentials belong in a credential helper, never in persisted evidence.
     if "://" in url:
         parsed = urlsplit(url)
+        require(
+            parsed.scheme in ("file", "http", "https", "ssh", "git"),
+            "unsupported push URL transport",
+        )
         require(
             not parsed.password,
             "push URL credentials are forbidden; use a credential helper",
@@ -582,14 +590,25 @@ def main():
             repository_location(record["plan"]["url"]) == repository_location(consumer),
             "submodule receipt destination differs from committed consumer URL",
         )
-        refs = git("ls-remote", consumer, "refs/heads/*", "refs/tags/*").splitlines()
-        # ls-remote advertises objects without downloading them. Fetch missing tips
-        # into the object database only; do not update branches or FETCH_HEAD.
-        for tip in {line.split()[0] for line in refs}:
+        refs = dict(
+            line.split()[::-1]
+            for line in git(
+                "ls-remote", consumer, "refs/heads/*", "refs/tags/*"
+            ).splitlines()
+        )
+        # Prefer the reviewed destination, then stop at the first proven ancestor.
+        tips = list(
+            dict.fromkeys(
+                [refs[record["plan"]["ref"]]] if record["plan"]["ref"] in refs else []
+            )
+        )
+        tips += [tip for tip in dict.fromkeys(refs.values()) if tip not in tips]
+        reachable = False
+        for tip in tips:
             if subprocess.run(
                 ["git", "cat-file", "-e", tip + "^{commit}"], capture_output=True
             ).returncode:
-                subprocess.run(
+                fetched = subprocess.run(
                     [
                         "git",
                         "fetch",
@@ -598,27 +617,25 @@ def main():
                         consumer,
                         tip,
                     ],
-                    check=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-        require(
-            any(
+                if fetched.returncode:
+                    continue
+            if (
                 subprocess.run(
-                    [
-                        "git",
-                        "merge-base",
-                        "--is-ancestor",
-                        sys.argv[4],
-                        line.split()[0],
-                    ],
+                    ["git", "merge-base", "--is-ancestor", sys.argv[4], tip],
                     capture_output=True,
                 ).returncode
                 == 0
-                for line in refs
-            ),
-            "submodule commit is not reachable from advertised remote refs",
+            ):
+                reachable = True
+                break
+        require(
+            reachable,
+            "submodule reachability could not be verified from advertised remote refs",
         )
+
     else:
         raise ValueError(
             "usage: review-gate prepare [REMOTE BRANCH] | record PLAN SCAN_DIR AGENT_JSON | push REMOTE URL"

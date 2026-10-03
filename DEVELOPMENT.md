@@ -81,3 +81,7 @@ push 성공은 PR 피드백 처리 완료가 아니다. 최신 head에서 봇 �
 목적지 비교는 커스텀 포트와 일반 SSH 서버의 상대/절대 경로를 보존한다. HTTPS/SSH 별칭은 GitHub의 동일 저장소 namespace에 한해 정규화하고, 로컬 경로/file URL은 실제 절대 경로로 비교한다. SHA가 같은 기존 gitlink도 base/head 전체 목록에서 committed `.gitmodules` URL을 비교하여 URL만 변경한 커밋이 하위 도달 가능성 검증을 건너뛰지 못하게 한다.
 
 빈 worktree hooksPath도 명시적 override이므로 설치를 차단한다. URL의 query/fragment는 전송 의미의 동등성을 보장할 수 없어 거부하고, 일반 네트워크 URL의 escaped path는 그대로 비교한다.
+
+하위 URL은 file/HTTP(S)/SSH/Git 전송과 절대 로컬 경로만 지원하며 `<helper>::<address>` 및 임의 scheme은 Git 호출 전에 차단한다. 설치 대상 실행파일 경로가 디렉터리이면 기존 상태를 보존하고 차단한다. PR 완료 관찰은 thread pagination 뒤 최신 봇 요약과 metadata를 읽으며, 최종 reviewDecision/각 리뷰어의 latestReviews에 Changes requested가 남으면 mergeable 표시와 무관하게 차단한다.
+
+등록된 worktree를 검사할 수 없거나 설정 조회가 오류이면 설치를 차단한다. `reported` coverage도 push를 차단한다. 하위 원격 도달 가능성은 receipt 목적지 ref를 먼저 검사하고 tip을 순차적으로 검증하며, 첫 증명 이후 관련 없는 ref를 fetch하지 않는다. 특정 tip fetch 실패만으로 종료하지 않으며 어느 ref에서도 증명하지 못하면 차단한다.
