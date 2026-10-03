@@ -108,15 +108,37 @@ def security_review(directory, plan):
     return {'directory': str(directory), 'manifest_sha256': digest(directory / 'scan-manifest.json')}
 
 
+def safe_push_url(url):
+    # Credentials belong in a credential helper, never in persisted evidence.
+    if '://' in url:
+        parsed = urlsplit(url)
+        require(not parsed.password, 'push URL credentials are forbidden; use a credential helper')
+        if parsed.scheme in ('http', 'https'):
+            require(parsed.username is None and not parsed.query and not parsed.fragment,
+                    'HTTP push URL must not contain userinfo, query or fragment')
+    return url
+
+
+def advertised_refs(url, ref):
+    safe_push_url(url)
+    return dict(line.split()[::-1] for line in git('ls-remote', url, ref, 'refs/heads/main').splitlines())
+
+
 def validate_plan(plan):
     require(plan.get('version') == 2, 'unsupported push plan')
     require(plan['ref'].startswith('refs/heads/') and plan['ref'] != 'refs/heads/main', 'use a feature branch and PR')
+    safe_push_url(plan['url'])
     revision(plan['head'])
     revision(plan['scan_base'])
     if set(plan['remote_old']) != {'0'}:
         require(plan['scan_base'] == plan['remote_old'], 'existing branch base mismatch')
         revision(plan['remote_old'])
     else:
+        refs = advertised_refs(plan['url'], plan['ref'])
+        require(refs.get(plan['ref'], '0' * len(plan['head'])) == plan['remote_old'],
+                'destination branch changed; prepare and review again')
+        require(refs.get('refs/heads/main') == plan['remote_main'],
+                'remote main baseline changed or forged; prepare and review again')
         revision(plan['remote_main'])
         require(git('merge-base', plan['remote_main'], plan['head']) == plan['scan_base'], 'new branch baseline mismatch')
 
@@ -141,9 +163,9 @@ def main():
         require(not git('status', '--porcelain'), 'commit intended changes before preparing push')
         ref = 'refs/heads/' + branch
         head = git('rev-parse', ref + '^{commit}')
-        url = git('remote', 'get-url', '--push', remote)
+        url = git('remote', 'get-url', '--push', '--all', remote)
         require(len(url.splitlines()) == 1, 'one push URL required')
-        refs = dict(line.split()[::-1] for line in git('ls-remote', url, ref, 'refs/heads/main').splitlines())
+        refs = advertised_refs(url, ref)
         old = refs.get(ref, '0' * len(head))
         plan = {'version': 2, 'url': url, 'ref': ref, 'remote_old': old, 'head': head}
         if set(old) == {'0'}:
@@ -178,7 +200,7 @@ def main():
         target.write_text(json.dumps(record, indent=2) + '\n')
         print('Registered sealed scan and independent review:', target)
     elif mode == 'push':
-        url = sys.argv[3]
+        url = safe_push_url(sys.argv[3])
         for line in sys.stdin:
             local_ref, head, ref, old = line.split()
             require(set(head) != {'0'}, 'ref deletion is blocked')
@@ -196,5 +218,6 @@ if __name__ == '__main__':
     try:
         main()
     except (ValueError, OSError, KeyError, IndexError, TypeError, subprocess.CalledProcessError) as error:
-        print('BLOCKED: push gate:', error, file=sys.stderr)
+        message = 'Git or validator command failed' if isinstance(error, subprocess.CalledProcessError) else str(error)
+        print('BLOCKED: push gate:', message, file=sys.stderr)
         sys.exit(1)

@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Plugin-independent boundaries using isolated real Git repositories."""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+count = 0
+with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
+    temp = Path(directory).resolve()
+    repo = temp / "repo"
+    repo.mkdir()
+    env = os.environ.copy()
+    # Git invokes hooks with repository variables; do not leak them into fixtures.
+    for key in subprocess.check_output(["git", "rev-parse", "--local-env-vars"], text=True).splitlines():
+        env.pop(key, None)
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+               CODEX_SECURITY_PLUGIN_DIR=str(temp / "missing-plugin"))
+
+    def run(args, success=True, cwd=repo):
+        global count
+        result = subprocess.run(args, cwd=cwd, env=env, text=True, capture_output=True)
+        assert (result.returncode == 0) == success, (args, result.stdout, result.stderr)
+        count += 1
+        return result.stdout.strip(), result.stderr
+
+    run(["git", "init", "-b", "main"])
+    run(["git", "config", "user.name", "Boundary Test"])
+    run(["git", "config", "user.email", "test@example.invalid"])
+    run(["git", "commit", "--allow-empty", "-m", "test: old baseline"])
+    baseline = run(["git", "rev-parse", "HEAD"])[0]
+    remote = temp / "remote.git"
+    run(["git", "init", "--bare", str(remote)])
+    url = "file://localhost" + str(remote)
+    run(["git", "remote", "add", "origin", url])
+    run(["git", "push", "origin", "main"])
+    old_tree = temp / "old worktree"
+    run(["git", "worktree", "add", "-b", "old-feature", str(old_tree), baseline])
+    run(["git", "checkout", "-b", "feature"])
+    (repo / "scripts").mkdir()
+    for name in ("review-gate", "prepare-push", "install-hooks"):
+        shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
+    run(["git", "add", "."])
+    run(["git", "commit", "-m", "test: feature"])
+    head = run(["git", "rev-parse", "HEAD"])[0]
+    prepare = ["./scripts/prepare-push", "origin", "feature"]
+    run(prepare)
+    planpath = next((repo / ".git/push-reviews/plans").glob("*.json"))
+    plan = json.loads(planpath.read_text())
+    assert plan["scan_base"] == baseline and plan["remote_main"] == baseline
+    assert plan["head"] == head
+    saved = planpath.read_bytes()
+    # Both URLs exist but preparation must stop before writing any new plan.
+    remote2 = temp / "mirror.git"
+    run(["git", "init", "--bare", str(remote2)])
+    run(["git", "config", "--add", "remote.origin.pushurl", url])
+    run(["git", "config", "--add", "remote.origin.pushurl", "file://localhost" + str(remote2)])
+    assert "one push URL required" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    assert run(["git", "ls-remote", str(remote2)])[0] == ""
+    run(["git", "config", "--unset-all", "remote.origin.pushurl"])
+    # Synthetic credential: reject before contacting a server or saving it.
+    credential = "fixture-credential-do-not-use"
+    run(["git", "config", "remote.origin.pushurl", "https://user:" + credential + "@example.invalid/repo.git"])
+    output, error = run(prepare, False)
+    assert "credentials are forbidden" in error
+    assert credential not in output + error
+    assert credential not in planpath.read_text()
+    assert planpath.read_bytes() == saved
+    run(["git", "config", "--unset", "remote.origin.pushurl"])
+    # A forged baseline must be rejected before unavailable scan validation.
+    forged = {**plan, "remote_main": head, "scan_base": head}
+    forgedpath = temp / "forged.json"
+    forgedpath.write_text(json.dumps(forged))
+    args = ["./scripts/review-gate", "record", str(forgedpath), str(temp / "no-scan"), str(temp / "no-agent")]
+    assert "baseline changed or forged" in run(args, False)[1]
+    # Changing the actual remote baseline also invalidates an otherwise real plan.
+    run(["git", "--git-dir", str(remote), "fetch", str(repo), "feature"])
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head])
+    args[2] = str(planpath)
+    assert "baseline changed or forged" in run(args, False)[1]
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
+    # The destination appearing after preparation requires a new plan too.
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/feature", head])
+    assert "destination branch changed" in run(args, False)[1]
+    run(["git", "--git-dir", str(remote), "update-ref", "-d", "refs/heads/feature"])
+    # Preserve unrelated existing hook configurations and their files.
+    custom = temp / "custom-hooks"
+    custom.mkdir()
+    marker = custom / "pre-push"
+    marker.write_text("preserve custom hook")
+    run(["git", "config", "core.hooksPath", str(custom)])
+    run(["./scripts/install-hooks"], False)
+    assert marker.read_text() == "preserve custom hook"
+    assert run(["git", "config", "core.hooksPath"])[0] == str(custom)
+    run(["git", "config", "core.hooksPath", ".githooks"])
+    run(["./scripts/install-hooks"])
+    hooks = Path(run(["git", "config", "core.hooksPath"])[0])
+    assert hooks.is_absolute() and (hooks / "pre-push").is_file()
+    assert not (old_tree / ".githooks").exists()
+    # Actual Git pre-push from an older worktree must not bypass the gate.
+    output, error = run(["git", "push", "--dry-run", "origin", "old-feature"], False, old_tree)
+    assert "BLOCKED: push gate" in error
+    assert run(["git", "ls-remote", "origin", "refs/heads/old-feature"])[0] == ""
+    run([str(hooks / "pre-commit")], False, old_tree)
+    run(["./scripts/install-hooks"])
+    assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
+    # Worktree-specific config must not silently override shared installation.
+    run(["git", "config", "extensions.worktreeConfig", "true"])
+    run(["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=old_tree)
+    assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+print("PASS:", count, "plugin-independent Git boundary checks; isolated local remotes only")

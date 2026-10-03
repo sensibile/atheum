@@ -1,10 +1,47 @@
 #!/bin/sh
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+common=$(git rev-parse --git-common-dir)
+common=$(cd "$common" && pwd -P)
+hooks="$common/codex-hooks"
 existing=$(git config --get core.hooksPath || true)
-if [ -n "$existing" ] && [ "$existing" != .githooks ]; then
-  echo "BLOCKED: existing hooksPath: $existing" >&2
+if [ -n "$existing" ] && [ "$existing" != .githooks ] && [ "$existing" != "$hooks" ]; then
+  echo 'BLOCKED: existing hooksPath differs; preserve it and reconcile manually' >&2
   exit 1
 fi
-git config --local core.hooksPath .githooks
-echo 'Installed .githooks for this repository (shared across linked worktrees).'
+# Refuse worktree overrides that would silently bypass the shared gate.
+if [ "$(git config --get extensions.worktreeConfig || true)" = true ]; then
+  git worktree list --porcelain | while IFS= read -r line; do
+    case "$line" in
+      'worktree '*)
+        path=${line#worktree }
+        override=$(git -C "$path" config --worktree --get core.hooksPath || true)
+        if [ -n "$override" ] && [ "$override" != "$hooks" ]; then
+          echo 'BLOCKED: a worktree hooksPath override exists; reconcile manually' >&2
+          exit 1
+        fi ;;
+    esac
+  done
+fi
+mkdir -p "$hooks"
+cp ./scripts/review-gate "$hooks/review-gate"
+cat > "$hooks/pre-push" <<'HOOK'
+#!/bin/sh
+set -eu
+runner=$(cd "$(dirname "$0")" && pwd -P)/review-gate
+cd "$(git rev-parse --show-toplevel)"
+exec "$runner" push "$@"
+HOOK
+cat > "$hooks/pre-commit" <<'HOOK'
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+[ -x ./.githooks/pre-commit ] || {
+  echo 'BLOCKED: this worktree lacks its project pre-commit checks' >&2
+  exit 1
+}
+exec ./.githooks/pre-commit "$@"
+HOOK
+chmod +x "$hooks/review-gate" "$hooks/pre-push" "$hooks/pre-commit"
+git config --local core.hooksPath "$hooks"
+echo 'Installed shared push gate and project pre-commit dispatcher.'

@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,9 +25,13 @@ with tempfile.TemporaryDirectory(prefix='push-gate-test-') as tmp:
     temp = Path(tmp).resolve()
     repo = temp / 'repo'
     repo.mkdir()
+    env = os.environ.copy()
+    for key in subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).splitlines():
+        env.pop(key, None)
+    env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
     def run(args, success=True, stdin=None):
         global count
-        result = subprocess.run(args, cwd=repo, text=True, input=stdin, capture_output=True)
+        result = subprocess.run(args, cwd=repo, env=env, text=True, input=stdin, capture_output=True)
         assert (result.returncode == 0) == success, (args, result.stdout, result.stderr)
         count += 1
         return result.stdout.strip()
@@ -77,6 +82,24 @@ with tempfile.TemporaryDirectory(prefix='push-gate-test-') as tmp:
     record = ['./scripts/review-gate', 'record', str(planpath), str(scan), str(agent)]
     seal()
     run(record)
+    # A forged baseline must fail registration and actual pre-push, even with
+    # otherwise valid sealed scan and independent-review artifacts.
+    original_plan = planpath.read_text()
+    planpath.write_text(json.dumps({**plan, 'remote_main': head, 'scan_base': head}))
+    run(record, False)
+    planpath.write_text(original_plan)
+    receiptpath = repo / folder / (gate.identity(plan) + '.json')
+    original_receipt = receiptpath.read_text()
+    receipt = json.loads(original_receipt)
+    receipt['plan'].update(remote_main=head, scan_base=head)
+    receiptpath.write_text(json.dumps(receipt))
+    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
+    receiptpath.write_text(original_receipt)
+    # A real baseline change after registration invalidates the receipt.
+    run(['git', '--git-dir', str(remote), 'fetch', str(repo), 'feature'])
+    run(['git', '--git-dir', str(remote), 'update-ref', 'refs/heads/main', head])
+    run(['git', 'push', '--dry-run', 'origin', 'feature'], False)
+    run(['git', '--git-dir', str(remote), 'update-ref', 'refs/heads/main', baseline])
     # Desktop producer's actual contract omits the optional remote field.
     without_remote = copy.deepcopy(manifest)
     without_remote['scan']['target'].pop('remote')
