@@ -97,3 +97,7 @@ worktree 목록은 `--porcelain -z`와 NUL-safe reader로 읽어 줄바꿈이 �
 공유 codex-hooks 디렉터리 자체의 심볼릭 링크도 설치 전에 거부한다. 기존·끊어진 링크 모두 대상 파일이나 hooksPath를 수정하지 않는다.
 
 커밋된 .gitmodules 경로는 NUL record와 첫 newline 구분자로 읽어 경로 안의 줄바꿈을 보존한다. 준비·실제 훅은 remote.<name>.receivepack 설정(명령행 -c 주입 포함)을 거부한다. 지원하는 전달 명령은 일반 git push origin BRANCH이며 --receive-pack/--exec는 금지한다. Git은 그 명령행 옵션을 pre-push 인자로 전달하지 않으므로 훅만으로 이를 강제할 수 없다. --no-verify와 같은 소유자 우회는 신뢰 경계 밖이며 서버 보호 규칙을 대신하지 않는다.
+
+저장소 URL 값은 Git 출력의 마지막 LF만 제거하고 앞뒤 space 문자를 보존한다. URL 내부의 CR·LF·TAB은 파서/record 의미가 달라질 수 있으므로 명시적으로 거부한다. 커밋된 consumer URL과 원격 URL 확장·준비·push 비교가 같은 보존 규칙을 사용한다.
+
+훅 설치는 현재 비활성인 onbranch/gitdir 조건까지 고려해 conditional include를 보수적으로 거부한다. 훅과 무관한 조건부 include도 이 설치 방식에서는 지원하지 않는다. 설치 후 소유자가 설정을 변경하거나 훅을 우회하는 경우까지 강제할 수는 없다.

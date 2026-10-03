@@ -42,6 +42,16 @@ for record in records.split(b"\0"):
     actual = os.path.realpath(os.fsdecode(available.stdout.removesuffix(b"\n")))
     if actual != common:
         sys.exit("BLOCKED: registered worktree belongs to a different repository")
+    # Current effective values cannot expose hooks hidden in dormant conditions.
+    # Conservatively reject conditional includes, even when presently inactive.
+    conditional = subprocess.run(
+        ["git", "-C", path, "config", "--includes", "--null", "--get-regexp", r"^includeif\..*\.path$"],
+        capture_output=True,
+    )
+    if conditional.returncode == 0:
+        sys.exit("BLOCKED: effective worktree hooksPath may change through conditional includes; reconcile manually")
+    if conditional.returncode != 1:
+        sys.exit("BLOCKED: conditional configuration cannot be inspected")
     effective = subprocess.run(
         ["git", "-C", path, "config", "--null", "--show-origin", "--get-all", "core.hooksPath"],
         capture_output=True,

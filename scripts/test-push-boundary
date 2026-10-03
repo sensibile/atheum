@@ -391,6 +391,23 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
         run(["git", "config", "extensions.worktreeConfig", "true"])
     finally:
         absent_tree.rename(old_tree)
+    run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
+    dormant_local = temp / "dormant-local-hooks"
+    dormant_local.write_text("[core]\n hooksPath = " + str(custom) + "\n")
+    local_key = "includeIf.onbranch:release/**.path"
+    run(["git", "config", "--worktree", local_key, str(dormant_local)], cwd=old_tree)
+    assert "conditional includes" in run(["./scripts/install-hooks"], False)[1]
+    run(["git", "config", "--worktree", "--unset", local_key], cwd=old_tree)
+    # Dormant conditions must not become hook overrides after branch/new worktree changes.
+    dormant_file = temp / "dormant-hooks"
+    dormant_file.write_text("[core]\n hooksPath = " + str(custom) + "\n")
+    for dormant_key in (
+        "includeIf.onbranch:release/**.path",
+        "includeIf.gitdir:/future/worktree/.path",
+    ):
+        run(["git", "config", dormant_key, str(dormant_file)])
+        assert "conditional includes" in run(["./scripts/install-hooks"], False)[1]
+        run(["git", "config", "--unset", dormant_key])
     # Conditional includes can override hooks without worktreeConfig.
     run(["git", "config", "--unset", "extensions.worktreeConfig"])
     include_file = temp / "conditional-hooks"
@@ -404,7 +421,6 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     run(["git", "config", "--unset", include_key])
     run(["git", "config", "extensions.worktreeConfig", "true"])
     # Introduced then removed content leaves an empty endpoint diff but history.
-    run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
     newline_tree = temp / "linked\nworktree"
     run(
         ["git", "worktree", "add", "-b", "newline-feature", str(newline_tree), baseline]

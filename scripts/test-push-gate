@@ -68,6 +68,12 @@ for remote_url in (
             reason in str(error)
             for reason in ("remote-helper", "unsupported", "option-like")
         )
+for control in ("\r", "\n", "\t"):
+    try:
+        gate.safe_push_url("file:///fixture/repository" + control)
+        raise AssertionError("control-character URL accepted")
+    except ValueError as error:
+        assert "control-character" in str(error)
 count = 0
 with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     temp = Path(tmp).resolve()
@@ -443,6 +449,28 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     finally:
         os.chdir(previous_cwd)
     count += 1
+    # Quoted trailing whitespace denotes a distinct actual consumer repository.
+    spaced_remote = temp / "child-space.git "
+    run(["git", "clone", "--bare", str(remote), str(spaced_remote)])
+    spaced_url = "file://localhost" + str(spaced_remote)
+    run(
+        ["git", "config", "-f", ".gitmodules", "submodule.child.url", spaced_url],
+        cwd=newline_parent,
+    )
+    run(["git", "add", ".gitmodules"], cwd=newline_parent)
+    run(["git", "commit", "-m", "test: preserve URL whitespace"], cwd=newline_parent)
+    spaced_head = run(["git", "rev-parse", "HEAD"], cwd=newline_parent)
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(newline_parent)
+        assert gate.submodule_url(spaced_head, "child\npath") == spaced_url
+        assert gate.expanded_destination(spaced_url) == spaced_url
+        assert gate.repository_location(spaced_url) != gate.repository_location(
+            remote_url
+        )
+    finally:
+        os.chdir(previous_cwd)
+    count += 3
     # A fork receipt cannot authorize a consumer URL where the SHA is absent.
     child_receipt = json.loads(receiptpath.read_text())
     original_child_receipt = receiptpath.read_bytes()

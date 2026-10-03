@@ -206,6 +206,10 @@ def security_review(directory, plan):
 
 
 def safe_push_url(url):
+    require(
+        not any(c in url for c in "\r\n\t"),
+        "control-character repository URL is unsupported",
+    )
     require(not url.startswith("-"), "option-like repository URL is forbidden")
     # Repository-controlled URLs must not select arbitrary Git remote helpers.
     if not Path(url).is_absolute():
@@ -254,9 +258,14 @@ def safe_push_url(url):
     return url
 
 
+def git_value(*args):
+    # Path/URL values may end in whitespace; strip only Git's output delimiter.
+    return os.fsdecode(subprocess.check_output(["git", *args]).removesuffix(b"\n"))
+
+
 def expanded_destination(url):
     safe_push_url(url)
-    expanded = git("ls-remote", "--get-url", "--", url)
+    expanded = git_value("ls-remote", "--get-url", "--", url)
     safe_push_url(expanded)
     require(
         repository_location(expanded) == repository_location(url),
@@ -294,7 +303,7 @@ def push_destination(remote, url):
     standard_receive_pack(remote)
     safe_push_url(url)
     if remote in git("remote").splitlines():
-        urls = git("remote", "get-url", "--push", "--all", remote).splitlines()
+        urls = git_value("remote", "get-url", "--push", "--all", remote).splitlines()
         require(len(urls) == 1, "one push URL required at push time")
         require(urls[0] == url, "push destination changed since preparation")
     else:
@@ -322,7 +331,7 @@ def submodule_url(revision, path):
         if "\n" in record and record.split("\n", 1)[1] == path
     ]
     require(len(keys) == 1, "submodule path must have one committed URL")
-    url = git(
+    url = git_value(
         "config", "--blob", revision + ":.gitmodules", "--get", keys[0][:-4] + "url"
     )
     safe_push_url(url)  # Relative URLs need a separately specified resolution contract.
@@ -507,7 +516,7 @@ def main():
         standard_receive_pack(remote)
         ref = "refs/heads/" + branch
         head = git("rev-parse", ref + "^{commit}")
-        url = git("remote", "get-url", "--push", "--all", remote)
+        url = git_value("remote", "get-url", "--push", "--all", remote)
         require(len(url.splitlines()) == 1, "one push URL required")
         refs = advertised_refs(url, ref)
         old = refs.get(ref, "0" * len(head))
