@@ -27,6 +27,32 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 plugin = gate.plugin().parent.parent
 example = plugin / "examples/completed-scan"
+for left, right in (
+    (
+        "ssh://git@example.invalid:2222/owner/repo.git",
+        "ssh://git@example.invalid:3333/owner/repo.git",
+    ),
+    ("git@example.invalid:owner/repo.git", "ssh://git@example.invalid/owner/repo.git"),
+    ("https://example.invalid/repo", "https://example.invalid/repo.git"),
+):
+    assert gate.repository_location(left) != gate.repository_location(right)
+for remote_url in (
+    "ssh://git@example.invalid/repo?different=1",
+    "git://example.invalid/repo#different",
+    "ssh://git@example.invalid/repo?",
+    "git://example.invalid/repo#",
+):
+    try:
+        gate.repository_location(remote_url)
+        raise AssertionError("ambiguous URL accepted")
+    except ValueError as error:
+        assert "query or fragment" in str(error)
+assert gate.repository_location(
+    "https://example.invalid/owner%2Frepo"
+) != gate.repository_location("https://example.invalid/owner/repo")
+assert gate.repository_location(
+    "git@github.com:sensibile/acropolis.git"
+) == gate.repository_location("https://github.com/sensibile/acropolis.git")
 count = 0
 with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     temp = Path(tmp).resolve()
@@ -147,6 +173,23 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head])
     run(["git", "push", "--dry-run", "origin", "feature"], False)
     run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
+    # Local destination forms normalize to the canonical producer's file URL.
+    for declared in (str(remote), "file://" + str(remote)):
+        assert gate.repository_location(declared) == gate.repository_location(
+            remote_url
+        )
+        local_plan = {**plan, "url": declared}
+        local_planpath = temp / "local-plan.json"
+        local_planpath.write_text(json.dumps(local_plan))
+        run(
+            [
+                "./scripts/review-gate",
+                "record",
+                str(local_planpath),
+                str(scan),
+                str(agent),
+            ]
+        )
     # Desktop producer's actual contract omits the optional remote field.
     without_remote = copy.deepcopy(manifest)
     without_remote["scan"]["target"].pop("remote")
@@ -256,6 +299,10 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
         ],
         cwd=parent,
     )
+    (parent / ".gitmodules").write_text(
+        '[submodule "child"]\n\tpath = child\n\turl = ' + remote_url + "\n"
+    )
+    run(["git", "add", ".gitmodules"], cwd=parent)
     run(["git", "commit", "-m", "test: parent baseline"], cwd=parent)
     parent_base = run(["git", "rev-parse", "HEAD"], cwd=parent)
     parent_remote = temp / "parent.git"
@@ -307,6 +354,17 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
             {"child": {"repository": str(repo), "receipt_path": str(receiptpath)}}
         )
     )
+    for configkey in ("diff.ignoreSubmodules", "submodule.child.ignore"):
+        run(["git", "config", configkey, "all"], cwd=parent)
+        run(parent_record, False, cwd=parent)
+        run(["git", "config", "--unset", configkey], cwd=parent)
+    # A fork receipt cannot authorize a consumer URL where the SHA is absent.
+    child_receipt = json.loads(receiptpath.read_text())
+    original_child_receipt = receiptpath.read_bytes()
+    child_receipt["plan"]["url"] = "file://localhost" + str(mirror)
+    receiptpath.write_text(json.dumps(child_receipt))
+    run(parent_record + [str(child_evidence)], False, cwd=parent)
+    receiptpath.write_bytes(original_child_receipt)
     run(parent_record + [str(child_evidence)], cwd=parent)
     parent_receipt = (
         parent / ".git/push-reviews" / (gate.identity(parent_plan) + ".json")
@@ -320,6 +378,57 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     ]
     # Parent itself is not published, even though all code evidence exists.
     run(verify_parent, False, cwd=parent)
+    # Exact gitlink moves preserve the existing child baseline without new review.
+    mover = temp / "mover"
+    run(["git", "clone", str(parent_remote), str(mover)], cwd=parent)
+    run(["git", "config", "user.name", "Synthetic Test"], cwd=mover)
+    run(["git", "config", "user.email", "test@example.invalid"], cwd=mover)
+    run(["git", "update-index", "--force-remove", "child"], cwd=mover)
+    run(
+        [
+            "git",
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "160000," + baseline + ",moved",
+        ],
+        cwd=mover,
+    )
+    (mover / ".gitmodules").write_text(
+        '[submodule "child"]\n\tpath = moved\n\turl = ' + remote_url + "\n"
+    )
+    run(["git", "add", ".gitmodules"], cwd=mover)
+    run(["git", "commit", "-m", "test: exact move"], cwd=mover)
+    moved_head = run(["git", "rev-parse", "HEAD"], cwd=mover)
+    saved_cwd = Path.cwd()
+    try:
+        os.chdir(mover)
+        assert (
+            gate.changed_gitlinks({"scan_base": parent_base, "head": moved_head}) == {}
+        )
+    finally:
+        os.chdir(saved_cwd)
+    # Metadata-only consumer URL switches are rejected with unchanged gitlinks.
+    # Reset only this disposable fixture clone to its committed baseline.
+    run(["git", "reset", "--hard", parent_base], cwd=mover)
+    (mover / ".gitmodules").write_text(
+        '[submodule "child"]\n\tpath = child\n\turl = '
+        + "file://localhost"
+        + str(mirror)
+        + "\n"
+    )
+    run(["git", "add", ".gitmodules"], cwd=mover)
+    run(["git", "commit", "-m", "test: URL-only switch"], cwd=mover)
+    metadata_head = run(["git", "rev-parse", "HEAD"], cwd=mover)
+    try:
+        os.chdir(mover)
+        try:
+            gate.changed_gitlinks({"scan_base": parent_base, "head": metadata_head})
+            raise AssertionError("metadata-only URL switch bypassed evidence")
+        except ValueError as error:
+            assert "unchanged submodule URL change" in str(error)
+    finally:
+        os.chdir(saved_cwd)
     # Child evidence tampering is caught again at parent push time.
     shutil.copytree(root / ".githooks", parent / ".githooks")
     (parent / "scripts").mkdir()
@@ -331,6 +440,113 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     run(["git", "push", "--dry-run", "origin", "feature"], False, cwd=parent)
     receiptpath.write_bytes(child_receipt_bytes)
     run(["git", "push", "--dry-run", "origin", "feature"], cwd=parent)
+    # Publish the next reviewed child commit and accept a contiguous A->B->C chain.
+    next_head = run(["git", "rev-parse", "HEAD"])
+    run(["./scripts/prepare-push", "origin", "feature"])
+    next_planpath = max(
+        (repo / folder / "plans").glob("*.json"), key=lambda p: p.stat().st_mtime_ns
+    )
+    next_plan = json.loads(next_planpath.read_text())
+    assert next_plan["scan_base"] == head and next_plan["head"] == next_head
+    old_scan = scan
+    scan = temp / "next-child-scan"
+    scan.mkdir()
+    next_manifest = copy.deepcopy(manifest)
+    next_manifest["scan"]["target"].update(baseRevision=head, headRevision=next_head)
+    seal(next_manifest)
+    next_agent = temp / "next-agent.json"
+    next_agent.write_text(
+        json.dumps({**agentdata, "reviewed_base": head, "reviewed_head": next_head})
+    )
+    run(
+        [
+            "./scripts/review-gate",
+            "record",
+            str(next_planpath),
+            str(scan),
+            str(next_agent),
+        ]
+    )
+    next_receipt = repo / folder / (gate.identity(next_plan) + ".json")
+    run(["git", "push", "origin", "feature"])
+    scan = old_scan
+    run(
+        ["git", "update-index", "--cacheinfo", "160000," + next_head + ",child"],
+        cwd=parent,
+    )
+    tree = run(["git", "write-tree"], cwd=parent)
+    chain_parent_head = run(
+        [
+            "git",
+            "commit-tree",
+            tree,
+            "-p",
+            parent_base,
+            "-m",
+            "test: batched child update",
+        ],
+        cwd=parent,
+    )
+    run(["git", "update-ref", "refs/heads/feature", chain_parent_head], cwd=parent)
+    chain_plan = {**parent_plan, "head": chain_parent_head}
+    chain_planpath = temp / "chain-plan.json"
+    chain_planpath.write_text(json.dumps(chain_plan))
+    scan = temp / "chain-parent-scan"
+    scan.mkdir()
+    chain_manifest = copy.deepcopy(parent_manifest)
+    chain_manifest["scan"]["target"]["headRevision"] = chain_parent_head
+    seal(chain_manifest)
+    chain_agent = temp / "chain-agent.json"
+    chain_agent.write_text(
+        json.dumps(
+            {
+                **agentdata,
+                "reviewed_base": parent_base,
+                "reviewed_head": chain_parent_head,
+            }
+        )
+    )
+    chain_record = [
+        str(root / "scripts/review-gate"),
+        "record",
+        str(chain_planpath),
+        str(scan),
+        str(chain_agent),
+        str(child_evidence),
+    ]
+    run(chain_record, False, cwd=parent)  # A->B alone cannot attest A->C.
+    for chain, success in (
+        ([next_receipt, receiptpath], False),
+        ([receiptpath, next_receipt], True),
+    ):
+        child_evidence.write_text(
+            json.dumps(
+                {
+                    "child": {
+                        "repository": str(repo),
+                        "receipt_paths": [str(p) for p in chain],
+                    }
+                }
+            )
+        )
+        run(chain_record, success, cwd=parent)
+    run(["git", "push", "--dry-run", "origin", "feature"], cwd=parent)
+    # Another clone advances to a descendant absent from the evidence repository.
+    outsider = temp / "outsider"
+    run(["git", "clone", "--branch", "feature", str(remote), str(outsider)])
+    run(["git", "config", "user.name", "Synthetic Test"], cwd=outsider)
+    run(["git", "config", "user.email", "test@example.invalid"], cwd=outsider)
+    run(
+        ["git", "commit", "--allow-empty", "-m", "test: unseen remote descendant"],
+        cwd=outsider,
+    )
+    tip = run(["git", "rev-parse", "HEAD"], cwd=outsider)
+    run(["git", "push", "origin", "feature"], cwd=outsider)
+    run(["git", "cat-file", "-e", tip + "^{commit}"], False)
+    branch_before = run(["git", "rev-parse", "HEAD"])
+    run(chain_record, cwd=parent)
+    assert run(["git", "rev-parse", "HEAD"]) == branch_before
+    run(["git", "cat-file", "-e", tip + "^{commit}"])
 print(
     "PASS:",
     count,

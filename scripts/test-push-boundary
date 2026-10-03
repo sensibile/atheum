@@ -206,12 +206,111 @@ with tempfile.TemporaryDirectory(prefix="push-boundary-") as directory:
     assert "BLOCKED: push gate" in error
     assert run(["git", "ls-remote", "origin", "refs/heads/old-feature"])[0] == ""
     run([str(hooks / "pre-commit")], False, old_tree)
-    run(["./scripts/install-hooks"])
+    old_inode = (hooks / "review-gate").stat().st_ino
+    with (hooks / "review-gate").open("rb") as opened:
+        old_content = opened.read()
+        run(["./scripts/install-hooks"])
+        opened.seek(0)
+        assert opened.read() == old_content
+    assert (hooks / "review-gate").stat().st_ino != old_inode
+    assert (hooks / "review-gate").read_bytes() == old_content
     assert run(["git", "config", "core.hooksPath"])[0] == str(hooks)
     # Worktree-specific config must not silently override shared installation.
     run(["git", "config", "extensions.worktreeConfig", "true"])
     run(["git", "config", "--worktree", "core.hooksPath", str(custom)], cwd=old_tree)
+    for spelling in ("true", "yes", "on", "1", "TRUE"):
+        run(["git", "config", "extensions.worktreeConfig", spelling])
+        assert (
+            "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+        )
+    run(["git", "config", "--worktree", "core.hooksPath", ""], cwd=old_tree)
     assert "worktree hooksPath override" in run(["./scripts/install-hooks"], False)[1]
+    # Introduced then removed content leaves an empty endpoint diff but history.
+    run(["git", "config", "--worktree", "--unset", "core.hooksPath"], cwd=old_tree)
+    # Avoid the project's intentionally absent checks for isolated fixture commits.
+    run(["git", "config", "core.hooksPath", str(temp / "fixture-no-hooks")])
+    (repo / "transient").write_text("fixture sensitive intermediate content")
+    run(["git", "add", "transient"])
+    run(["git", "commit", "-m", "test: intermediate"])
+    run(["git", "rm", "transient"])
+    run(["git", "commit", "-m", "test: removal"])
+    assert "exactly one new commit" in run(prepare, False)[1]
+    assert planpath.read_bytes() == saved
+    multihead = run(["git", "rev-parse", "HEAD"])[0]
+    multi = {**plan, "head": multihead}
+    multipath = temp / "multi.json"
+    multipath.write_text(json.dumps(multi))
+    assert (
+        "exactly one new commit"
+        in run(
+            [
+                "./scripts/review-gate",
+                "record",
+                str(multipath),
+                str(temp / "no-scan"),
+                str(temp / "no-agent"),
+            ],
+            False,
+        )[1]
+    )
+    # External CLI fixture supplies a transition during pagination, without
+    # patching implementation functions; real GitHub observation is separate.
+    cli = temp / "cli"
+    cli.mkdir()
+    metadata = {
+        "headRefOid": head_fixture,
+        "mergeStateStatus": "CLEAN",
+        "mergeable": "MERGEABLE",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://example.invalid/pr/1",
+    }
+    comments = [
+        [
+            {
+                "id": 1,
+                "updated_at": "2026-10-03T00:00:00Z",
+                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "body": summary_fixture,
+            }
+        ]
+    ]
+    graph = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "headRefOid": head_fixture,
+                    "reviewThreads": {
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                }
+            }
+        }
+    }
+    runner = cli / "gh"
+    runner.write_text(
+        '#!/usr/bin/env python3\nimport json\nfrom pathlib import Path\np=Path(__file__).parent\nc=p/"counter"\ni=int(c.read_text()) if c.exists() else 0\nc.write_text(str(i+1))\nprint(json.dumps(json.loads((p/"responses").read_text())[i]))\n'
+    )
+    runner.chmod(0o755)
+    for final, expected in (
+        (metadata, 0),
+        ({**metadata, "mergeStateStatus": "BLOCKED"}, 3),
+        ({**metadata, "headRefOid": "b" * 40}, 1),
+    ):
+        (cli / "counter").unlink(missing_ok=True)
+        (cli / "responses").write_text(json.dumps([metadata, comments, graph, final]))
+        result = subprocess.run(
+            [str(ROOT / "scripts/pr-review-status"), "example/repo", "1"],
+            env={**env, "PATH": str(cli) + os.pathsep + env["PATH"]},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == expected, (result.stdout, result.stderr)
+        assert (cli / "counter").read_text() == "4"
+        if expected == 3:
+            assert json.loads(result.stdout)["mergeStateStatus"] == "BLOCKED"
+        count += 1
 print(
     "PASS:",
     count,

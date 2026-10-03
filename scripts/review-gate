@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 
 def git(*args):
@@ -88,16 +88,69 @@ def agent_review(path, plan):
 
 
 def repository_location(remote):
-    """Optional producer URLs may omit SSH user or use HTTPS instead of SSH."""
+    """Preserve transport/port/path semantics; normalize GitHub and local aliases."""
+    safe_push_url(remote)
+    if Path(remote).is_absolute():
+        return "local", str(Path(remote).resolve())
+    if remote.startswith("file:"):
+        parsed = urlsplit(remote)
+        return "local", str(Path(unquote(parsed.path)).resolve())
     if "://" in remote:
         parsed = urlsplit(remote)
-        host, path = parsed.hostname, parsed.path
+        scheme, host, user, path = (
+            parsed.scheme,
+            parsed.hostname,
+            parsed.username,
+            parsed.path,
+        )
+        port = parsed.port or {"http": 80, "https": 443, "ssh": 22, "git": 9418}.get(
+            scheme
+        )
     else:
-        match = re.fullmatch(r"(?:[^@]+@)?([^:]+):(.+)", remote)
+        match = re.fullmatch(
+            r"(?:(?P<user>[^@]+)@)?(?P<host>[^:]+):(?P<path>.+)", remote
+        )
         require(match is not None, "unrecognized declared repository location")
-        host, path = match.groups()
+        scheme, host, user, path, port = (
+            "ssh",
+            match["host"],
+            match["user"],
+            match["path"],
+            22,
+        )
     require(bool(host) and bool(path), "invalid declared repository location")
-    return host.lower(), path.strip("/").removesuffix(".git")
+    # GitHub uses the same repository namespace for its documented HTTPS and
+    # git-user SSH transports. Other servers may map them to different roots.
+    if host.lower() == "github.com" and (
+        (scheme == "https" and port == 443)
+        or (scheme == "ssh" and port == 22 and user in (None, "git"))
+    ):
+        return "github.com", path.strip("/").removesuffix(".git")
+    return scheme, host.lower(), port, user, path
+
+
+def gitlinks(revision):
+    result = {}
+    for entry in git("ls-tree", "-r", "-z", revision).split("\0"):
+        if entry:
+            metadata, path = entry.split("\t", 1)
+            mode, kind, sha = metadata.split()
+            if mode == "160000":
+                result[path] = sha
+    return result
+
+
+def endpoint_range(plan):
+    # Endpoint scans cannot account for content introduced then removed in history.
+    commits = git("rev-list", plan["scan_base"] + ".." + plan["head"]).splitlines()
+    require(
+        len(commits) == 1 and commits[0] == plan["head"],
+        "endpoint reviews require exactly one new commit; prepare each commit separately",
+    )
+    require(
+        git("show", "-s", "--format=%P", plan["head"]) == plan["scan_base"],
+        "endpoint reviews require a linear single-commit update",
+    )
 
 
 def security_review(directory, plan):
@@ -159,6 +212,10 @@ def safe_push_url(url):
             not parsed.password,
             "push URL credentials are forbidden; use a credential helper",
         )
+        require(
+            "?" not in url and "#" not in url,
+            "push URL query or fragment is unsupported",
+        )
         if parsed.scheme in ("http", "https"):
             require(
                 parsed.username is None and not parsed.query and not parsed.fragment,
@@ -205,25 +262,80 @@ def push_destination(remote, url):
         require(remote == url, "unknown push remote")
 
 
+def submodule_url(revision, path):
+    result = subprocess.run(
+        [
+            "git",
+            "config",
+            "--blob",
+            revision + ":.gitmodules",
+            "--get-regexp",
+            r"^submodule\..*\.path$",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    require(result.returncode == 0, "submodule path missing from committed .gitmodules")
+    keys = [
+        line.split(None, 1)[0]
+        for line in result.stdout.splitlines()
+        if len(line.split(None, 1)) == 2 and line.split(None, 1)[1] == path
+    ]
+    require(len(keys) == 1, "submodule path must have one committed URL")
+    url = git(
+        "config", "--blob", revision + ":.gitmodules", "--get", keys[0][:-4] + "url"
+    )
+    safe_push_url(url)  # Relative URLs need a separately specified resolution contract.
+    return url
+
+
 def changed_gitlinks(plan):
+    before, after = gitlinks(plan["scan_base"]), gitlinks(plan["head"])
+    # .gitmodules changes alone do not appear as raw gitlink records.
+    for path in before.keys() & after.keys():
+        if before[path] == after[path]:
+            require(
+                repository_location(submodule_url(plan["scan_base"], path))
+                == repository_location(submodule_url(plan["head"], path)),
+                "unchanged submodule URL change needs explicit reachability evidence; unsupported",
+            )
     parts = git(
         "diff",
         "--raw",
         "--no-abbrev",
         "-z",
         "--no-renames",
+        "--ignore-submodules=none",
         plan["scan_base"],
         plan["head"],
     ).split("\0")
+    changes = [(parts[i].split(), parts[i + 1]) for i in range(0, len(parts) - 1, 2)]
+    deleted = {}
+    for (oldmode, newmode, old, new, status), path in changes:
+        if oldmode == ":160000" and newmode == "000000":
+            deleted.setdefault(old, []).append(path)
     links = {}
-    for index in range(0, len(parts) - 1, 2):
-        oldmode, newmode, old, new, status = parts[index].split()
-        if newmode == "160000":
+    for (oldmode, newmode, old, new, status), path in changes:
+        if newmode != "160000":
+            continue
+        oldpath = path
+        if oldmode != ":160000":
+            matches = deleted.get(new, [])
             require(
-                oldmode == ":160000",
+                len(matches) == 1,
                 "new submodule needs an explicit initial security baseline; unsupported",
             )
-            links[parts[index + 1]] = (old, new)
+            oldpath = matches.pop()
+            old = new  # An exact gitlink move introduces no child commit.
+        previous = submodule_url(plan["scan_base"], oldpath)
+        consumer = submodule_url(plan["head"], path)
+        if old == new:
+            require(
+                repository_location(previous) == repository_location(consumer),
+                "unchanged submodule URL change needs explicit reachability evidence; unsupported",
+            )
+            continue
+        links[path] = (old, new, consumer)
     return links
 
 
@@ -236,25 +348,38 @@ def submodule_reviews(plan, evidence):
     env = os.environ.copy()
     for key in git("rev-parse", "--local-env-vars").splitlines():
         env.pop(key, None)
-    for path, (base, head) in links.items():
+    for path, (base, head, consumer) in links.items():
         item = evidence[path]
-        receipt = Path(item["receipt_path"]).resolve(strict=True)
-        require(digest(receipt) == item["receipt_sha256"], "submodule receipt changed")
+        entries = item.get("receipts") or [
+            {"path": item["receipt_path"], "sha256": item["receipt_sha256"]}
+        ]
         repository = Path(item["repository"]).resolve(strict=True)
-        subprocess.run(
-            [
-                sys.executable,
-                str(Path(__file__).resolve()),
-                "verify-submodule",
-                str(receipt),
-                base,
-                head,
-            ],
-            cwd=repository,
-            env=env,
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
+        cursor = base
+        for entry in entries:
+            receipt = Path(entry["path"]).resolve(strict=True)
+            require(digest(receipt) == entry["sha256"], "submodule receipt changed")
+            child = load(receipt)["plan"]
+            require(
+                child["scan_base"] == cursor,
+                "submodule receipt chain is not contiguous",
+            )
+            cursor = child["head"]
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "verify-submodule",
+                    str(receipt),
+                    child["scan_base"],
+                    cursor,
+                    consumer,
+                ],
+                cwd=repository,
+                env=env,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+        require(cursor == head, "submodule receipt chain does not reach new gitlink")
 
 
 def advertised_refs(url, ref):
@@ -296,9 +421,12 @@ def validate_plan(plan):
             "new branch baseline mismatch",
         )
 
+    endpoint_range(plan)
+
 
 def check_record(record, delivered=False):
     plan = record["plan"]
+    endpoint_range(plan)
     if delivered:
         # A child's successful push changes the destination ref; retain its
         # exact reviewed range while verifying remote reachability separately.
@@ -393,14 +521,25 @@ def main():
             "agent": {"path": str(path), "sha256": digest(path)},
         }
         evidence = load(sys.argv[5]) if len(sys.argv) == 6 else {}
-        record["submodules"] = {
-            name: {
+        record["submodules"] = {}
+        for name, item in evidence.items():
+            paths = item.get("receipt_paths")
+            if paths is None:
+                paths = [item["receipt_path"]]
+            require(
+                isinstance(paths, list) and bool(paths),
+                "submodule receipt chain must not be empty",
+            )
+            record["submodules"][name] = {
                 "repository": str(Path(item["repository"]).resolve(strict=True)),
-                "receipt_path": str(Path(item["receipt_path"]).resolve(strict=True)),
-                "receipt_sha256": digest(item["receipt_path"]),
+                "receipts": [
+                    {
+                        "path": str(Path(path).resolve(strict=True)),
+                        "sha256": digest(path),
+                    }
+                    for path in paths
+                ],
             }
-            for name, item in evidence.items()
-        }
         submodule_reviews(plan, record["submodules"])
         folder = store()
         folder.mkdir(parents=True, exist_ok=True)
@@ -428,7 +567,9 @@ def main():
             check_record(record)
         print("pre-push: sealed Codex Security and independent review verified")
     elif mode == "verify-submodule":
-        require(len(sys.argv) == 5, "verify-submodule RECEIPT BASE HEAD")
+        require(
+            len(sys.argv) in (5, 6), "verify-submodule RECEIPT BASE HEAD [CONSUMER_URL]"
+        )
         record = load(sys.argv[2])
         require(
             record["plan"]["scan_base"] == sys.argv[3]
@@ -436,7 +577,31 @@ def main():
             "submodule review range mismatch",
         )
         check_record(record, delivered=True)
-        refs = git("ls-remote", record["plan"]["url"]).splitlines()
+        consumer = sys.argv[5] if len(sys.argv) == 6 else record["plan"]["url"]
+        require(
+            repository_location(record["plan"]["url"]) == repository_location(consumer),
+            "submodule receipt destination differs from committed consumer URL",
+        )
+        refs = git("ls-remote", consumer, "refs/heads/*", "refs/tags/*").splitlines()
+        # ls-remote advertises objects without downloading them. Fetch missing tips
+        # into the object database only; do not update branches or FETCH_HEAD.
+        for tip in {line.split()[0] for line in refs}:
+            if subprocess.run(
+                ["git", "cat-file", "-e", tip + "^{commit}"], capture_output=True
+            ).returncode:
+                subprocess.run(
+                    [
+                        "git",
+                        "fetch",
+                        "--no-tags",
+                        "--no-write-fetch-head",
+                        consumer,
+                        tip,
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
         require(
             any(
                 subprocess.run(

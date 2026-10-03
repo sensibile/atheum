@@ -93,6 +93,18 @@ def main():
         if not threads["pageInfo"]["hasNextPage"]:
             break
         cursor = threads["pageInfo"]["endCursor"]
+    final_pr = gh(
+        "pr",
+        "view",
+        number,
+        "--repo",
+        repo,
+        "--json",
+        "headRefOid,mergeStateStatus,mergeable,state,isDraft,url",
+    )
+    if final_pr["headRefOid"] != pr["headRefOid"]:
+        sys.exit("BLOCKED: PR head changed during observation; recheck")
+    pr = final_pr
     bot = completed_review(comments, pr["headRefOid"])
     ready = (
         bot["state"] == "completed"
