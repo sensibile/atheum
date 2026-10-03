@@ -28,16 +28,23 @@ spec.loader.exec_module(gate)
 # Policy is deterministic over immutable supplied observations, with no repository.
 base_sha, head_sha, other_sha = "a" * 40, "b" * 40, "c" * 40
 core_plan = {
-    "version": 2,
+    "version": 3,
+    "target_ref": "refs/heads/main",
+    "remote_main": base_sha,
     "ref": "refs/heads/feature",
     "scan_base": base_sha,
     "head": head_sha,
     "remote_old": base_sha,
 }
 core_snapshot = gate.PlanSnapshot(
-    ((head_sha, head_sha), (base_sha, base_sha), (base_sha, base_sha)),
-    (),
-    "",
+    (
+        (head_sha, head_sha),
+        (base_sha, base_sha),
+        (base_sha, base_sha),
+        (base_sha, base_sha),
+    ),
+    (("refs/heads/main", base_sha), ("refs/heads/feature", base_sha)),
+    base_sha,
     (head_sha,),
     (base_sha,),
 )
@@ -45,8 +52,9 @@ assert gate.plan_policy_errors(core_plan, core_snapshot) == ()
 assert "not a commit" in gate.plan_policy_errors(
     core_plan, core_snapshot._replace(resolved_commits=())
 )
-assert "existing branch base mismatch" in gate.plan_policy_errors(
-    {**core_plan, "remote_old": other_sha}, core_snapshot
+assert (
+    "destination branch changed; prepare and review again"
+    in gate.plan_policy_errors({**core_plan, "remote_old": other_sha}, core_snapshot)
 )
 for snapshot in (
     core_snapshot._replace(commits=()),
@@ -56,7 +64,9 @@ for snapshot in (
     assert gate.plan_policy_errors(core_plan, snapshot)
 new_plan = {**core_plan, "remote_old": "0" * 40, "remote_main": base_sha}
 new_snapshot = core_snapshot._replace(
-    advertised_refs=(("refs/heads/main", base_sha),), merge_base=base_sha
+    advertised_refs=(("refs/heads/main", base_sha),),
+    merge_base=base_sha,
+    resolved_commits=core_snapshot.resolved_commits[:3],
 )
 assert gate.plan_policy_errors(new_plan, new_snapshot) == ()
 for snapshot in (
@@ -67,6 +77,18 @@ for snapshot in (
     new_snapshot._replace(merge_base=other_sha),
 ):
     assert gate.plan_policy_errors(new_plan, snapshot)
+# Existing branches must still bind the live target and full PR merge-base.
+assert gate.plan_policy_errors({**core_plan, "version": 2}, core_snapshot)
+assert gate.plan_policy_errors({**core_plan, "scan_base": head_sha}, core_snapshot)
+assert gate.plan_policy_errors(
+    core_plan,
+    core_snapshot._replace(
+        advertised_refs=(
+            ("refs/heads/main", other_sha),
+            ("refs/heads/feature", base_sha),
+        )
+    ),
+)
 assert gate.plan_policy_errors(core_plan, core_snapshot) == ()
 plugin = gate.plugin().parent.parent
 example = plugin / "examples/completed-scan"
@@ -690,23 +712,26 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     run(["git", "push", "--dry-run", "origin", "feature"], False, cwd=parent)
     receiptpath.write_bytes(child_receipt_bytes)
     run(["git", "push", "--dry-run", "origin", "feature"], cwd=parent)
-    # Publish the next reviewed child commit and accept a contiguous A->B->C chain.
+    # Publish the next child commit with cumulative A->C review evidence.
     next_head = run(["git", "rev-parse", "HEAD"])
     run(["./scripts/prepare-push", "origin", "feature"])
     next_planpath = max(
         (repo / folder / "plans").glob("*.json"), key=lambda p: p.stat().st_mtime_ns
     )
     next_plan = json.loads(next_planpath.read_text())
-    assert next_plan["scan_base"] == head and next_plan["head"] == next_head
+    assert next_plan["scan_base"] == baseline and next_plan["head"] == next_head
+    assert next_plan["remote_old"] == head
     old_scan = scan
     scan = temp / "next-child-scan"
     scan.mkdir()
     next_manifest = copy.deepcopy(manifest)
-    next_manifest["scan"]["target"].update(baseRevision=head, headRevision=next_head)
+    next_manifest["scan"]["target"].update(
+        baseRevision=baseline, headRevision=next_head
+    )
     seal(next_manifest)
     next_agent = temp / "next-agent.json"
     next_agent.write_text(
-        json.dumps({**agentdata, "reviewed_base": head, "reviewed_head": next_head})
+        json.dumps({**agentdata, "reviewed_base": baseline, "reviewed_head": next_head})
     )
     run(
         [
@@ -717,6 +742,40 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
             str(next_agent),
         ]
     )
+    # A validly sealed scan of only the latest push cannot satisfy the PR gate.
+    narrowed_manifest = copy.deepcopy(next_manifest)
+    narrowed_manifest["scan"]["target"]["baseRevision"] = head
+    seal(narrowed_manifest)
+    run(
+        [
+            "./scripts/review-gate",
+            "record",
+            str(next_planpath),
+            str(scan),
+            str(next_agent),
+        ],
+        False,
+    )
+    seal(next_manifest)
+    # Target movement invalidates an existing branch's receipt at actual push.
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head])
+    run(["git", "push", "--dry-run", "origin", "feature"], False)
+    run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", baseline])
+    cumulative_agent = next_agent.read_bytes()
+    next_agent.write_text(
+        json.dumps({**agentdata, "reviewed_base": head, "reviewed_head": next_head})
+    )
+    run(
+        [
+            "./scripts/review-gate",
+            "record",
+            str(next_planpath),
+            str(scan),
+            str(next_agent),
+        ],
+        False,
+    )
+    next_agent.write_bytes(cumulative_agent)
     next_receipt = repo / folder / (gate.identity(next_plan) + ".json")
     run(["git", "push", "origin", "feature"])
     scan = old_scan
@@ -767,7 +826,8 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     run(chain_record, False, cwd=parent)  # A->B alone cannot attest A->C.
     for chain, success in (
         ([next_receipt, receiptpath], False),
-        ([receiptpath, next_receipt], True),
+        ([receiptpath, next_receipt], False),
+        ([next_receipt], True),
     ):
         child_evidence.write_text(
             json.dumps(
