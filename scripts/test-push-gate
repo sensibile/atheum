@@ -194,7 +194,8 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     agentdata = {
         "kind": "agent",
         "verdict": "pass",
-        "independent": True,
+        "review_mode": "self",
+        "independent": False,
         "reviewed_base": baseline,
         "reviewed_head": head,
         "reviewer": "synthetic fixture",
@@ -242,6 +243,23 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     record = ["./scripts/review-gate", "record", str(planpath), str(scan), str(agent)]
     seal()
     run(record)
+    # Self-review passes actual registration and push validation without claiming independence.
+    run(["git", "push", "--dry-run", "origin", "feature"])
+    for mode, independent, accepted in (
+        (None, True, True), ("independent", True, True),
+        (None, False, False), ("self", True, False),
+        ("independent", False, False), ("other", False, False),
+        ("self", None, False), ("self", 0, False), ("self", "false", False),
+    ):
+        variant = {**agentdata, "independent": independent}
+        if mode is None:
+            variant.pop("review_mode")
+        else:
+            variant["review_mode"] = mode
+        agent.write_text(json.dumps(variant))
+        run(record, accepted)
+    agent.write_text(json.dumps(agentdata))
+    run(record)
     # Both attestation fields must contain real text, not arbitrary truthy JSON.
     before_attestation = (repo / folder / (gate.identity(plan) + ".json")).read_bytes()
     for field in ("reviewer", "summary"):
@@ -273,7 +291,7 @@ with tempfile.TemporaryDirectory(prefix="push-gate-test-") as tmp:
     run(record)
     run(["git", "config", "codex.securityPluginDir", str(plugin)])
     # A forged baseline must fail registration and actual pre-push, even with
-    # otherwise valid sealed scan and independent-review artifacts.
+    # otherwise valid sealed scan and review artifacts.
     original_plan = planpath.read_text()
     planpath.write_text(json.dumps({**plan, "remote_main": head, "scan_base": head}))
     run(record, False)

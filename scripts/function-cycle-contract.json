@@ -1,0 +1,11 @@
+{
+  "version": "function-cycle-v1",
+  "scope": "Local public Atheum API; fixed Function with synthetic ontology knowledge",
+  "requirements": {
+    "execution_and_restart": "Accepted IDs, durable successful result, independent stored effect and history/result read by a fresh VM",
+    "duplicate_acceptance": "Concurrent identical calls share one invocation; repeat run cannot create another attempt; conflicting input rejected",
+    "invalid_input": "Invalid Function input rejected before invocation creation and effect",
+    "unknown_result": "Committed effect with lost response remains unresolved/unknown; permitted recovery preserves original version",
+    "interrupted_execution": "Worker death after effect retains call intent and unknown; explicit recovery reuses exact receipt"
+  }
+}

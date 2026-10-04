@@ -81,10 +81,13 @@ def plugin():
 
 def agent_review(path, plan):
     data = load(path)
+    mode = data.get("review_mode")
+    self_review = mode == "self" and data.get("independent") is False
+    independent_review = mode in (None, "independent") and data.get("independent") is True
     require(
         data.get("kind") == "agent"
         and data.get("verdict") == "pass"
-        and data.get("independent") is True
+        and (self_review or independent_review)
         and data.get("blocking_findings") == []
         and data.get("reviewed_base") == plan["scan_base"]
         and data.get("reviewed_head") == plan["head"]
@@ -92,7 +95,7 @@ def agent_review(path, plan):
             isinstance(data.get(field), str) and data[field].strip()
             for field in ("reviewer", "summary")
         ),
-        "independent review missing, failed or out of range",
+        "Codex review missing, failed, contradictory or out of range",
     )
 
 
@@ -685,7 +688,7 @@ def main():
             head,
         )
         print(
-            "Then run an independent review on the same range. Do not edit, commit or push during either review."
+            "Then run a Codex self-review on the same range. Do not edit, commit or push during either review."
         )
         print(
             "Register: ./scripts/review-gate record",
@@ -733,7 +736,7 @@ def main():
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / (identity(plan) + ".json")
         target.write_text(json.dumps(record, indent=2) + "\n")
-        print("Registered sealed scan and independent review:", target)
+        print("Registered sealed scan and Codex review:", target)
     elif mode == "push":
         ordinary_objects()
         url = safe_push_url(sys.argv[3])
@@ -759,7 +762,7 @@ def main():
                 "PR target is updated by the same push; push target separately, then prepare and review again",
             )
             check_record(record)
-        print("pre-push: sealed Codex Security and independent review verified")
+        print("pre-push: sealed Codex Security and Codex review verified")
     elif mode == "verify-submodule":
         require(
             len(sys.argv) in (5, 6), "verify-submodule RECEIPT BASE HEAD [CONSUMER_URL]"

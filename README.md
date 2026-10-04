@@ -2,6 +2,9 @@
 
 로컬 서비스 경계 `Atheum.submit/run/get/history/cancel/recover`로 `supplier.set_active.v1` 하나를 실행한다. PostgreSQL에 접수·실행·시도·이력·결과를 저장하고 기존 Akashic CLI로 실제 Supplier를 변경한다. 서버나 UI는 없다. Axiom/Arbiter/Archon/Workflow/Agent는 구현하지 않았다.
 
+제품 실행 경로의 완료 판정은 [Function 실행 완료 계약](FUNCTION_CYCLE.md)을 따른다.
+`./scripts/verify-function-cycle`은 필수 조건별 증거를 남기고 누락·실패를 완료로 표시하지 않는다.
+
 ## 초기 선택과 책임
 
 Elixir는 순수 입력/복구 판단과 프로세스 I/O를 나누고 작업 경계를 표현하기에 적합해 선택했다. PostgreSQL은 접수 unique 제약과 상태·journal의 원자적 변경을 위해 선택했다. 둘은 이번 사이클의 가역적인 구현 선택이며 사용자 확정 아키텍처가 아니다. 런타임 외부 패키지는 추가하지 않았다. dev/test 전용으로 공식 Hex의 Credo 1.7.19와 Dialyxir 1.4.8을 mix.lock에 고정했다. deps와 Hex/PLT 캐시는 프로젝트 내부에 두며 전역 설치는 없다. 설정 참고: [Credo 공식 문서](https://hexdocs.pm/credo/overview.html), [Dialyxir 공식 문서](https://hexdocs.pm/dialyxir/readme.html). 현재 PostgreSQL shell은 기존 psql을 프로세스로 호출하므로 연결 비용이 있고 장기 driver 선택은 미정이다. Elixir 1.20.4/OTP 29, PostgreSQL 17.10으로 검증했다.

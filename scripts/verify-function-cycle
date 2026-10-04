@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Execute the versioned public Function completion contract against real I/O."""
+import datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+from function_cycle_verdict import evaluate
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def main():
+    os.chdir(ROOT)
+    run = ROOT / "artifacts" / (datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y%m%dT%H%M%S%fZ") + "-function-cycle")
+    run.mkdir(parents=True)
+    contract_path = ROOT / "scripts/function-cycle-contract.json"
+    contract = json.loads(contract_path.read_text())
+    report = {"contract": contract, "contract_sha256": digest(contract_path),
+              "status": "BLOCKED", "complete": False, "checks": [],
+              "scope": contract["scope"]}
+    files = [ROOT / "mix.exs", ROOT / "mix.lock", ROOT / ".formatter.exs"]
+    for directory in ("lib", "priv", "test", "scripts"):
+        files.extend(path for path in (ROOT / directory).rglob("*")
+                     if path.is_file() and "__pycache__" not in path.parts)
+    report["source_sha256"] = {str(path.relative_to(ROOT)): digest(path) for path in sorted(files)}
+    report["head"] = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    report["working_tree"] = subprocess.check_output(["git", "status", "--porcelain"], text=True)
+    command = ["mix", "test", "--warnings-as-errors", "--only", "acceptance", "test/cycle_integration_test.exs", "--seed", "0"]
+    report["command"] = command
+    binary = Path(os.environ.get("AKASHIC_BINARY", "/missing"))
+    if not all(shutil.which(tool) for tool in ("mix", "elixir", "psql")):
+        report["reason"] = "mix, elixir and psql must already be installed"
+    elif not os.environ.get("ATHEUM_TEST_PG_URL") or not binary.is_file():
+        report["reason"] = "explicit ATHEUM_TEST_PG_URL and existing AKASHIC_BINARY required"
+    else:
+        report["akashic_binary_sha256"] = digest(binary)
+        env = dict(os.environ, HEX_HOME=str(ROOT / ".cache/hex"),
+                   ATHEUM_ACCEPTANCE_EVENTS=str(run / "events.json"))
+        try:
+            result = subprocess.run(command, env=env, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True, timeout=180)
+            (run / "execution.log").write_text(result.stdout)
+            events = json.loads((run / "events.json").read_text())
+            if not isinstance(events, list) or not all(isinstance(e, dict) for e in events):
+                raise ValueError("invalid acceptance event format")
+            report.update(evaluate(contract["requirements"], events, result.returncode))
+            report["exit_code"] = result.returncode
+            changed = [name for name, checksum in report["source_sha256"].items()
+                       if not (ROOT / name).is_file() or digest(ROOT / name) != checksum]
+            if digest(binary) != report["akashic_binary_sha256"]:
+                changed.append("AKASHIC_BINARY")
+            if changed:
+                report.update(status="FAIL", complete=False, changed_during_run=changed)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+            report.update(status="FAIL", complete=False, reason=type(error).__name__)
+    (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(report["status"] + ": " + str(run / "report.json"))
+    for check in report["checks"]:
+        print(check["status"] + ": " + check["id"])
+    return 0 if report["complete"] else (4 if report["status"] == "BLOCKED" else 1)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -7,17 +7,18 @@
 1. 의도한 변경을 커밋하고 작업 디렉터리를 정리한다. `main` 직접 push는 차단하며 작업 브랜치/PR을 사용한다.
 2. `./scripts/prepare-push origin BRANCH [TARGET_BRANCH]`로 version 3 계획을 생성한다. TARGET_BRANCH 기본값은 main이며 실제 PR 대상 브랜치와 일치하게 지정한다. 같은 push 목적지 저장소의 대상 브랜치만 지원하며 fork 간 PR은 별도 지원이 필요하다. 단일 원격 URL/ref/기존 SHA/head와 target_ref/remote_main을 기록한다(remote_main은 대상 브랜치 tip의 기존 필드명이다). 새 브랜치와 기존 브랜치 모두 대상 tip과 최종 head의 유일한 merge-base를 scan_base로 사용하여 PR 전체 누적 변경을 검사한다. remote_old는 전송 상태이며 리뷰 기준으로 대체할 수 없다. 복수 push URL 및 인증정보 URL은 계획 저장 전에 차단한다. 인증은 credential helper를 사용한다. 광고된 대상 커밋이 없으면 local ref/FETCH_HEAD 갱신 없이 객체만 fetch한다. 대상에 이미 도달 가능한 과거 변경과 과거 비밀 정보 검사는 별도다.
 3. Codex에게 출력된 정확한 base/head로 `$codex-security:security-diff-scan`을 실행하도록 요청한다. 설치된 플러그인의 전체 절차를 수행하고 완료한 sealed 결과 디렉터리를 보존한다. 준비 명령/Git hook이 자동으로 모델을 호출하는 방식은 아니다.
-4. 같은 범위에 독립 리뷰를 수행한다. 아래 JSON에 실제 근거를 기록한다.
+4. 현재 Codex가 같은 불변 범위를 자체 리뷰한다. 실제 버그·회귀·권한 경계와 검증 근거를 확인하고 아래 JSON에 결과를 기록한다. 자체 리뷰는 독립 리뷰로 표시하지 않는다.
 5. `./scripts/review-gate record PLAN_JSON COMPLETED_SCAN_DIR AGENT_JSON`으로 등록하고 승인된 `git push origin BRANCH`를 실행한다.
 
 ```json
 {
   "kind": "agent",
   "verdict": "pass",
-  "independent": true,
+  "review_mode": "self",
+  "independent": false,
   "reviewed_base": "계획의 scan_base 전체 SHA",
   "reviewed_head": "계획의 head 전체 SHA",
-  "reviewer": "실제 독립 리뷰어 및 모델/버전",
+  "reviewer": "실제 리뷰어 및 모델/버전",
   "summary": "검사 범위, 검토 근거, 한계와 결과",
   "blocking_findings": []
 }
@@ -29,7 +30,7 @@
 
 Git common directory의 `push-reviews/`에 계획/등록 결과를 저장한다. push 시 같은 원격/ref/base/head와 증거 해시 및 canonical 결과를 재검증한다. 증거 디렉터리와 agent JSON을 보존해야 한다. 다른 작업 디렉터리에서도 같은 Git 저장소는 증거를 공유한다. 등록된 결과가 바뀌면 다시 검사한다. 모든 브랜치에서 대상 tip과 목적지 ref를 등록/push 때 원격에서 재확인하며 merge-base를 재계산한다. version 2 계획/receipt는 새 gate에서 거부하므로 새 계획과 전체 PR 리뷰가 필요하다. 계획 파일은 전체 계획 내용의 해시로 구분한다. 기준 또는 목적지 브랜치가 바뀌면 새 계획과 검사가 필요하다.
 
-**보장 범위:** canonical seal은 내용 일관성 검사이며 모델 실행을 암호학적으로 증명하지 않는다. 독립 리뷰 JSON도 리뷰어의 attestation이다. 로컬 훅은 우회 가능하며 신뢰할 수 있는 CI/서버 정책을 대신하지 않는다. 코드/질문을 외부 모델에 보내기 전 데이터 전달 범위와 승인을 확인한다. 검사 완료가 전체 보안 보장은 아니다.
+**보장 범위:** canonical seal은 내용 일관성 검사이며 모델 실행을 암호학적으로 증명하지 않는다. 자체 리뷰 JSON도 리뷰어의 attestation이며 독립 검증을 뜻하지 않는다. 로컬 훅은 우회 가능하며 신뢰할 수 있는 CI/서버 정책을 대신하지 않는다. 기본 Codex 검사·자체 리뷰는 승인된 작업에 포함한다. 추가 외부 서비스나 모델로 코드/데이터를 전달할 때만 범위를 설명하고 승인받는다. 검사 완료가 전체 보안 보장은 아니다.
 
 ## PR
 
@@ -47,7 +48,7 @@ Desktop codex-security 결과의 `target.remote`는 선택 필드다. 없으면 
 
 상대 로컬 push URL은 worktree마다 다른 목적지가 될 수 있어 거부한다. 절대 경로나 절대 `file://` URL을 사용한다. push 직전에도 현재 remote의 모든 push URL을 다시 열거하여 복수 목적지를 차단한다. Git replacement refs, custom replacement namespace 및 legacy grafts가 있으면 prepare/record/push 모두 거부한다. 검사와 전송이 같은 Git 객체를 다루도록 먼저 해당 설정을 제거하고 새 계획과 리뷰를 만든다.
 
-변경된 기존 gitlink마다 하위 저장소의 정확한 이전/이후 SHA에 대한 sealed 검사와 독립 리뷰 receipt가 필요하다. 하위 커밋을 먼저 push하고 다음 JSON을 `record`의 마지막 선택 인자로 전달한다:
+변경된 기존 gitlink마다 하위 저장소의 정확한 이전/이후 SHA에 대한 sealed 검사와 Codex 리뷰 receipt가 필요하다. 하위 커밋을 먼저 push하고 다음 JSON을 `record`의 마지막 선택 인자로 전달한다:
 
 ```json
 {
@@ -108,8 +109,16 @@ worktree 목록은 `--porcelain -z`와 NUL-safe reader로 읽어 줄바꿈이 �
 
 경로를 담은 Git 출력은 bytes로 읽고 newline 변환 없이 decode한다. CR과 LF 경로를 구분하며 커밋된 .gitmodules는 regular blob 모드만 허용한다. symlink와 다른 tree entry는 파싱 전에 차단한다.
 
-독립 리뷰의 reviewer와 summary는 공백을 제외한 내용이 있는 문자열만 인정한다. 지정한 security plugin 경로는 절대 경로여야 하며 canonical 경로로 확인한다. 공유 설치 대상에 관리하는 세 이름 외 실행 파일이 있으면 활성화하거나 삭제하지 않고 설치를 차단한다.
+Codex 리뷰의 reviewer와 summary는 공백을 제외한 내용이 있는 문자열만 인정한다. 지정한 security plugin 경로는 절대 경로여야 하며 canonical 경로로 확인한다. 공유 설치 대상에 관리하는 세 이름 외 실행 파일이 있으면 활성화하거나 삭제하지 않고 설치를 차단한다.
 
 PR 요약에 포함된 Code Review와 Security Review는 모두 완료되어야 하며 각각의 커밋 ID를 전체 SHA로 해석하여 최신 head와 비교한다. 다른 커밋을 검토한 완료 row는 현재 작업의 완료 증거가 아니다.
 
 POSIX wrapper는 sentinel로 Git 경로 출력의 마지막 LF 하나만 제거하여 checkout 이름 끝의 줄바꿈을 보존한다. Python pre-commit도 bytes 경로를 같은 규칙으로 읽는다.
+
+## 자체 리뷰 증거 호환성
+
+기본 리뷰는 `review_mode=self`, `independent=false`를 명시한다. 기존 독립 리뷰의
+`independent=true` 증거도 허용하며 mode는 생략하거나 `independent`로 지정한다.
+mode/independent 조합이 모순되거나 자체 리뷰의 mode가 누락되면 차단한다. 두 방식
+모두 정확한 base/head, pass, 빈 blocking_findings, 실제 reviewer/summary가 필요하다.
+보안 scan의 canonical seal, coverage와 finding gate는 그대로 적용한다.

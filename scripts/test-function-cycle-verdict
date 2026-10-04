@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Mutation checks for the completion decision, independent of app execution."""
+import unittest
+from function_cycle_verdict import evaluate
+
+
+class VerdictTest(unittest.TestCase):
+    def test_complete_evidence(self):
+        self.assertTrue(evaluate({"a": "contract"}, [{"id": "a", "status": "PASS"}], 0)["complete"])
+
+    def test_mutated_evidence_cannot_complete(self):
+        for events, code in [([], 0), ([{"id": "a", "status": "FAIL"}], 0),
+                             ([{"id": "a", "status": "SKIP"}], 0),
+                             ([{"id": "a", "status": "PASS"}] * 2, 0),
+                             ([{"id": "a", "status": "PASS"}], 1),
+                             ([{"id": "a", "status": "PASS"}, {"id": "unknown", "status": "PASS"}], 0)]:
+            with self.subTest(events=events, code=code):
+                self.assertFalse(evaluate({"a": "contract"}, events, code)["complete"])
+        self.assertFalse(evaluate({}, [], 0)["complete"])
+
+
+if __name__ == "__main__":
+    unittest.main()
