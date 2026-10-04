@@ -83,6 +83,31 @@ defmodule Atheum.CycleIntegrationTest do
     result["blocked_by_product"]
   end
 
+  @tag acceptance: "invalid_input"
+  test "invalid Function input never creates an invocation or changes the graph", %{
+    config: c,
+    opts: opts
+  } do
+    for input <- [
+          %{},
+          %{"supplier_id" => "S1", "active" => "false", "expected_version" => 1},
+          %{"supplier_id" => "S1", "active" => false, "expected_version" => -1},
+          %{"supplier_id" => "S1", "active" => false, "expected_version" => 1, "extra" => true}
+        ] do
+      key = Postgres.id()
+      assert {:error, :invalid_input} = Atheum.submit(key, input, c, opts)
+
+      assert {:ok, "0"} =
+               Postgres.query(
+                 "SELECT count(*) FROM atheum_invocations WHERE acceptance_key=#{Postgres.text(key)}",
+                 c
+               )
+    end
+
+    assert impact(c, 1) == %{}
+  end
+
+  @tag acceptance: "execution_and_restart"
   test "real Function, durable result, independent graph answer and no extra replay version", %{
     config: c,
     opts: opts
@@ -146,6 +171,19 @@ defmodule Atheum.CycleIntegrationTest do
 
     assert JSON.decode!(String.trim(fresh_output)) == done
 
+    history_code =
+      "config = " <>
+        inspect(%{psql: c.psql, pg_url: c.pg_url}) <>
+        "; {:ok, events} = Atheum.history(" <>
+        inspect(row["invocation_id"]) <>
+        ", config); IO.puts(JSON.encode!(events))"
+
+    {history_output, 0} =
+      System.cmd(System.find_executable("elixir"), ["-pa", beam_path, "-e", history_code])
+
+    assert {:ok, persisted_history} = Atheum.history(row["invocation_id"], c)
+    assert JSON.decode!(String.trim(history_output)) == persisted_history
+
     assert {:ok, independent} =
              Postgres.query(
                "SELECT json_build_object('status',status,'version',result->'version','count',(SELECT count(*) FROM atheum_events e WHERE e.invocation_id=i.invocation_id)) FROM atheum_invocations i WHERE invocation_id=#{Postgres.text(row["invocation_id"])}",
@@ -158,6 +196,7 @@ defmodule Atheum.CycleIntegrationTest do
     assert Enum.uniq(Enum.map(history, & &1["invocation_id"])) == [row["invocation_id"]]
   end
 
+  @tag acceptance: "duplicate_acceptance"
   test "concurrent duplicate acceptance and conflicting input", %{config: c, opts: opts} do
     key = Postgres.id()
     tasks = for _ <- 1..4, do: Task.async(fn -> submit(c, opts, key) end)
@@ -174,8 +213,25 @@ defmodule Atheum.CycleIntegrationTest do
 
     assert {:ok, history} = Atheum.history(hd(rows)["invocation_id"], c)
     assert length(history) == 1
+    assert {:ok, done} = Atheum.run(hd(rows)["invocation_id"], c)
+    assert done["generation"] == 1
+    assert {:error, :not_accepted} = Atheum.run(done["invocation_id"], c)
+
+    assert {:ok, replay} =
+             Atheum.submit(
+               key,
+               %{"supplier_id" => "S1", "active" => false, "expected_version" => 1},
+               c,
+               opts
+             )
+
+    assert replay == done
+    assert impact(c, 2) == %{"P" => ["B"]}
+    assert {:ok, events} = Atheum.history(done["invocation_id"], c)
+    assert Enum.count(events, &(&1["kind"] == "call_intent")) == 1
   end
 
+  @tag acceptance: "interrupted_execution"
   test "real success then worker death before journal completion recovers exact receipt", %{
     config: c,
     opts: opts
@@ -244,6 +300,7 @@ defmodule Atheum.CycleIntegrationTest do
     assert {:error, :not_recoverable} = Atheum.recover(row["invocation_id"], c)
   end
 
+  @tag acceptance: "unknown_result"
   test "timeout is unknown and exact-payload recovery is safe", %{
     config: c,
     opts: opts,
